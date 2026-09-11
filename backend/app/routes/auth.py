@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import create_access_token
+from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
 from sqlalchemy import select
 
 from ..extensions import db
@@ -50,3 +50,15 @@ def login():
 
     token = create_access_token(identity=str(user.id), additional_claims={"role": user.role})
     return jsonify({"user": user.to_dict(), "access_token": token})
+
+
+@auth_bp.get("/me")
+@jwt_required()
+def get_current_user():
+    user_id = get_jwt_identity()
+    user = db.session.get(User, int(user_id))
+
+    if not user:
+        return jsonify({"message": "user not found"}), 404
+
+    return jsonify({"user": user.to_dict()}), 200
