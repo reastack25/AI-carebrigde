@@ -1,14 +1,33 @@
-import { useState } from "react";
-import { ArrowLeft, HeartPulse, LoaderCircle, Send, ShieldCheck } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowLeft, HeartPulse, LoaderCircle, Send, ShieldCheck, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
+
+const STORAGE_KEY = "carebridge_health_chat";
 
 export default function HealthChat() {
   const navigate = useNavigate();
   const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+  }, [messages]);
+
+  const clearConversation = () => {
+    if (loading) return;
+    setMessages([]);
+    setError("");
+    localStorage.removeItem(STORAGE_KEY);
+  };
 
   const submitMessage = async (event) => {
     event.preventDefault();
@@ -33,7 +52,7 @@ export default function HealthChat() {
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
       <nav className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
+        <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-6 py-4">
           <button onClick={() => navigate("/dashboard")} className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-cyan-700">
             <ArrowLeft size={17} /> Back to dashboard
           </button>
@@ -48,8 +67,15 @@ export default function HealthChat() {
           <p className="mt-3 max-w-2xl text-sm leading-6 text-cyan-50">Receive cautious, educational information in plain language. CareBridge AI does not diagnose or prescribe.</p>
         </div>
 
-        <div className="mt-6 min-h-80 space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          {messages.length === 0 && <p className="py-16 text-center text-sm text-slate-500">Your conversation will appear here.</p>}
+        <div className="mt-6 flex items-center justify-between gap-3">
+          <h2 className="font-semibold text-slate-800">Conversation</h2>
+          <button onClick={clearConversation} disabled={!messages.length || loading} className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-500 hover:bg-white hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40">
+            <Trash2 size={16} /> Clear
+          </button>
+        </div>
+
+        <div className="mt-2 min-h-80 space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          {messages.length === 0 && <p className="py-16 text-center text-sm text-slate-500">Your conversation will appear here and remain available after refresh.</p>}
           {messages.map((item, index) => (
             <div key={`${item.role}-${index}`} className={`flex ${item.role === "user" ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-6 ${item.role === "user" ? "bg-cyan-700 text-white" : "bg-slate-100 text-slate-800"}`}>{item.text}</div>
