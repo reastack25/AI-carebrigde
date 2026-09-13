@@ -1,4 +1,5 @@
 from google import genai
+from google.genai import types
 
 from ..config import Config
 
@@ -7,11 +8,21 @@ class GeminiServiceError(RuntimeError):
     """Raised when Gemini is unavailable or returns an unusable response."""
 
 
-def generate_health_chat_response(message: str) -> str:
+def _client():
     if not Config.GEMINI_API_KEY:
         raise GeminiServiceError("Gemini API key is not configured")
+    return genai.Client(api_key=Config.GEMINI_API_KEY)
 
-    client = genai.Client(api_key=Config.GEMINI_API_KEY)
+
+def _extract_text(response) -> str:
+    text = (response.text or "").strip()
+    if not text:
+        raise GeminiServiceError("Gemini returned an empty response")
+    return text
+
+
+def generate_health_chat_response(message: str) -> str:
+    client = _client()
     prompt = (
         "You are CareBridge AI, a healthcare information assistant. "
         "Provide clear, cautious, educational information. Do not diagnose, "
@@ -19,14 +30,23 @@ def generate_health_chat_response(message: str) -> str:
         "care for emergency warning signs. Keep the response concise.\n\n"
         f"User question: {message}"
     )
+    return _extract_text(
+        client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+    )
 
+
+def analyze_health_image(image_bytes: bytes, mime_type: str, instruction: str) -> str:
+    client = _client()
+    prompt = (
+        "You are CareBridge AI reviewing a user-provided healthcare image. "
+        "Explain only what can reasonably be observed. Do not diagnose, "
+        "prescribe, or invent unreadable text. If the image is unclear, say so. "
+        "Recommend a qualified healthcare professional for clinical decisions.\n\n"
+        f"User instruction: {instruction or 'Explain this image in plain language.'}"
+    )
+    image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
     response = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=prompt,
+        contents=[prompt, image_part],
     )
-    text = (response.text or "").strip()
-
-    if not text:
-        raise GeminiServiceError("Gemini returned an empty response")
-
-    return text
+    return _extract_text(response)
