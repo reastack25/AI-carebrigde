@@ -21,13 +21,25 @@ def _extract_text(response) -> str:
     return text
 
 
-def generate_health_chat_response(message: str) -> str:
+def _language_instruction(language: str) -> str:
+    languages = {
+        "en": "English",
+        "sw": "Kiswahili",
+        "luo": "Dholuo",
+        "kik": "Kikuyu",
+        "kal": "Kalenjin",
+    }
+    return f"Respond in {languages.get(language, 'English')}."
+
+
+def generate_health_chat_response(message: str, language: str = "en") -> str:
     client = _client()
     prompt = (
         "You are CareBridge AI, a healthcare information assistant. "
         "Provide clear, cautious, educational information. Do not diagnose, "
         "prescribe, or claim certainty. Ask the user to seek urgent medical "
-        "care for emergency warning signs. Keep the response concise.\n\n"
+        "care for emergency warning signs. Keep the response concise. "
+        f"{_language_instruction(language)}\n\n"
         f"User question: {message}"
     )
     return _extract_text(
@@ -35,13 +47,14 @@ def generate_health_chat_response(message: str) -> str:
     )
 
 
-def analyze_health_image(image_bytes: bytes, mime_type: str, instruction: str) -> str:
+def analyze_health_image(image_bytes: bytes, mime_type: str, instruction: str, language: str = "en") -> str:
     client = _client()
     prompt = (
         "You are CareBridge AI reviewing a user-provided healthcare image. "
         "Explain only what can reasonably be observed. Do not diagnose, "
         "prescribe, or invent unreadable text. If the image is unclear, say so. "
-        "Recommend a qualified healthcare professional for clinical decisions.\n\n"
+        "Recommend a qualified healthcare professional for clinical decisions. "
+        f"{_language_instruction(language)}\n\n"
         f"User instruction: {instruction or 'Explain this image in plain language.'}"
     )
     image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
