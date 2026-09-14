@@ -1,0 +1,125 @@
+from io import BytesIO
+from unittest.mock import patch
+
+from conftest import register_and_login
+
+
+def auth_headers(client):
+    token = register_and_login(client)
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_ai_requires_authentication(client):
+    response = client.post("/api/ai/symptom-check", json={"symptoms": "headache"})
+    assert response.status_code == 401
+
+
+def test_symptom_check_requires_symptoms(client):
+    headers = auth_headers(client)
+    response = client.post("/api/ai/symptom-check", headers=headers, json={})
+    assert response.status_code == 400
+    assert response.get_json()["message"] == "symptoms are required"
+
+
+def test_symptom_check_rejects_invalid_age(client):
+    headers = auth_headers(client)
+    response = client.post(
+        "/api/ai/symptom-check",
+        headers=headers,
+        json={"symptoms": "headache", "age": "121"},
+    )
+    assert response.status_code == 400
+
+
+def test_symptom_check_rejects_invalid_conversation_id(client):
+    headers = auth_headers(client)
+    response = client.post(
+        "/api/ai/symptom-check",
+        headers=headers,
+        json={"symptoms": "headache", "conversation_id": "abc"},
+    )
+    assert response.status_code == 400
+
+
+def test_symptom_check_rejects_other_users_conversation(client):
+    first_headers = auth_headers(client)
+    with patch(
+        "app.routes.ai.generate_symptom_check_response",
+        return_value={
+            "urgency": "routine",
+            "summary": "Test summary",
+            "possible_explanations": ["Test explanation"],
+            "next_steps": ["Monitor symptoms"],
+            "red_flags": ["Severe symptoms"],
+            "disclaimer": "Educational information only.",
+        },
+    ):
+        created = client.post(
+            "/api/ai/symptom-check",
+            headers=first_headers,
+            json={"symptoms": "headache"},
+        )
+    conversation_id = created.get_json()["conversation"]["id"]
+
+    second_headers = auth_headers(client, "other@example.com")
+    response = client.post(
+        "/api/ai/symptom-check",
+        headers=second_headers,
+        json={"symptoms": "headache", "conversation_id": conversation_id},
+    )
+    assert response.status_code == 404
+
+
+def test_symptom_check_success_with_mocked_gemini(client):
+    headers = auth_headers(client)
+    result = {
+        "urgency": "soon",
+        "summary": "This is a test educational summary.",
+        "possible_explanations": ["A common cause"],
+        "next_steps": ["Consider speaking with a clinician"],
+        "red_flags": ["Severe worsening symptoms"],
+        "disclaimer": "This is not a diagnosis.",
+    }
+    with patch("app.routes.ai.generate_symptom_check_response", return_value=result):
+        response = client.post(
+            "/api/ai/symptom-check",
+            headers=headers,
+            json={"symptoms": "mild headache", "age": "25", "duration": "1 day"},
+        )
+    assert response.status_code == 200
+    assert response.get_json()["result"] == result
+
+
+def test_chat_rejects_oversized_message(client):
+    headers = auth_headers(client)
+    response = client.post(
+        "/api/ai/chat",
+        headers=headers,
+        json={"message": "x" * 4001},
+    )
+    assert response.status_code == 400
+
+
+def test_analyze_image_rejects_unsupported_type(client):
+    headers = auth_headers(client)
+    response = client.post(
+        "/api/ai/analyze-image",
+        headers=headers,
+        data={"image": (BytesIO(b"not an image"), "file.txt")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 415
+
+
+def test_analyze_image_rejects_oversized_instruction(client):
+    headers = auth_headers(client)
+    response = client.post(
+        "/api/ai/analyze-image",
+        headers=headers,
+        data={
+            "instruction": "x" * 1001,
+            "image": (BytesIO(b"fake"), "file.png"),
+        },
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 400
