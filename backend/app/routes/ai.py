@@ -28,6 +28,14 @@ def _conversation(user_id, conversation_id=None, title="Health conversation"):
     return conversation
 
 
+def _conversation_id(value):
+    if value in (None, ""):
+        return None
+    if isinstance(value, bool) or not str(value).isdigit() or int(value) <= 0:
+        raise ValueError("conversation_id must be a positive integer")
+    return int(value)
+
+
 @ai_bp.get("/conversations")
 @jwt_required()
 def list_conversations():
@@ -66,11 +74,15 @@ def health_chat():
         return jsonify({"message": "message is required"}), 400
     if len(message) > 4000:
         return jsonify({"message": "message must not exceed 4000 characters"}), 400
+    try:
+        conversation_id = _conversation_id(data.get("conversation_id"))
+    except ValueError as error:
+        return jsonify({"message": str(error)}), 400
     language = data.get("language", "en") if data.get("language", "en") in SUPPORTED_LANGUAGES else "en"
     user_id = int(get_jwt_identity())
     try:
         response = generate_health_chat_response(message, language)
-        conversation = _conversation(user_id, data.get("conversation_id"), message[:60])
+        conversation = _conversation(user_id, conversation_id, message[:60])
         if not conversation:
             return jsonify({"message": "conversation not found"}), 404
         db.session.add(Message(conversation_id=conversation.id, sender="user", content=message, language=language))
@@ -98,11 +110,15 @@ def symptom_check():
         return jsonify({"message": "symptoms must not exceed 4000 characters"}), 400
     if age and (not age.isdigit() or not 0 < int(age) <= 120):
         return jsonify({"message": "age must be a number between 1 and 120"}), 400
+    try:
+        conversation_id = _conversation_id(data.get("conversation_id"))
+    except ValueError as error:
+        return jsonify({"message": str(error)}), 400
     language = data.get("language", "en") if data.get("language", "en") in SUPPORTED_LANGUAGES else "en"
     user_id = int(get_jwt_identity())
     try:
         result = generate_symptom_check_response(symptoms, age, duration, language)
-        conversation = _conversation(user_id, data.get("conversation_id"), "Symptom check")
+        conversation = _conversation(user_id, conversation_id, "Symptom check")
         if not conversation:
             return jsonify({"message": "conversation not found"}), 404
         db.session.add(Message(conversation_id=conversation.id, sender="user", content=f"Symptoms: {symptoms}", language=language))
