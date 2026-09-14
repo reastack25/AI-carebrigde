@@ -47,19 +47,25 @@ def generate_health_chat_response(message: str, language: str = "en") -> str:
     )
 
 
-def analyze_health_image(image_bytes: bytes, mime_type: str, instruction: str, language: str = "en") -> str:
+def analyze_health_document(file_bytes: bytes, mime_type: str, instruction: str, language: str = "en") -> str:
     client = _client()
     prompt = (
-        "You are CareBridge AI reviewing a user-provided healthcare image. "
-        "Explain only what can reasonably be observed. Do not diagnose, "
-        "prescribe, or invent unreadable text. If the image is unclear, say so. "
-        "Recommend a qualified healthcare professional for clinical decisions. "
+        "You are CareBridge AI reviewing a user-provided healthcare document or image. "
+        "Explain only information that can reasonably be observed. Do not diagnose, "
+        "prescribe, invent unreadable text, or present uncertain interpretations as facts. "
+        "If the content is unclear or incomplete, say so. Recommend a qualified healthcare "
+        "professional for clinical decisions. "
         f"{_language_instruction(language)}\n\n"
-        f"User instruction: {instruction or 'Explain this image in plain language.'}"
+        f"User instruction: {instruction or 'Explain this healthcare document in plain language.'}"
     )
-    image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+    document_part = types.Part.from_bytes(data=file_bytes, mime_type=mime_type)
     response = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=[prompt, image_part],
+        contents=[prompt, document_part],
     )
     return _extract_text(response)
+
+
+def analyze_health_image(image_bytes: bytes, mime_type: str, instruction: str, language: str = "en") -> str:
+    """Backward-compatible wrapper for image analysis callers."""
+    return analyze_health_document(image_bytes, mime_type, instruction, language)
