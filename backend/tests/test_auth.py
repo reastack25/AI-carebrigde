@@ -1,4 +1,4 @@
-from conftest import register_and_login
+from tests.helpers import register_and_login
 
 
 def test_health_endpoint(client):
