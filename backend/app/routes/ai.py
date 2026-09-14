@@ -11,7 +11,7 @@ SUPPORTED_LANGUAGES = {"en", "sw", "luo", "kik", "kal"}
 
 
 def _language():
-    data = request.get_json(silent=True) or {} if request.is_json else {}
+    data = (request.get_json(silent=True) or {}) if request.is_json else {}
     language = data.get("language", "en") if request.is_json else request.form.get("language", "en")
     return language if language in SUPPORTED_LANGUAGES else "en"
 
@@ -78,6 +78,9 @@ def analyze_image():
     uploaded_file = request.files.get("image")
     instruction = request.form.get("instruction", "").strip()
     language = _language()
+    conversation_id = request.form.get("conversation_id", "").strip()
+    if conversation_id and not conversation_id.isdigit():
+        return jsonify({"message": "conversation_id must be an integer"}), 400
     if not uploaded_file or not uploaded_file.filename:
         return jsonify({"message": "image file is required"}), 400
     allowed_types = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
@@ -89,10 +92,22 @@ def analyze_image():
         return jsonify({"message": "uploaded image is empty"}), 400
     if len(image_bytes) > 10 * 1024 * 1024:
         return jsonify({"message": "image must not exceed 10 MB"}), 413
+    user_id = int(get_jwt_identity())
     try:
         response = analyze_health_image(image_bytes, mime_type, instruction, language)
+        conversation = _conversation(user_id, int(conversation_id) if conversation_id else None, f"Image analysis: {uploaded_file.filename}")
+        if not conversation:
+            return jsonify({"message": "conversation not found"}), 404
+        user_content = f"Image uploaded: {uploaded_file.filename}"
+        if instruction:
+            user_content += f"\nInstruction: {instruction}"
+        db.session.add(Message(conversation_id=conversation.id, sender="user", content=user_content, language=language))
+        db.session.add(Message(conversation_id=conversation.id, sender="assistant", content=response, language=language))
+        db.session.commit()
     except GeminiServiceError as error:
+        db.session.rollback()
         return jsonify({"message": str(error)}), 503
     except Exception:
+        db.session.rollback()
         return jsonify({"message": "AI image analysis is temporarily unavailable"}), 502
-    return jsonify({"response": response}), 200
+    return jsonify({"response": response, "conversation": conversation.to_dict()}), 200
