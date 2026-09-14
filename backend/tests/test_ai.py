@@ -1,11 +1,11 @@
 from io import BytesIO
 from unittest.mock import patch
 
-from conftest import register_and_login
+from tests.helpers import register_and_login
 
 
-def auth_headers(client):
-    token = register_and_login(client)
+def auth_headers(client, email="patient@example.com"):
+    token = register_and_login(client, email)
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -90,6 +90,25 @@ def test_symptom_check_success_with_mocked_gemini(client):
     assert response.get_json()["result"] == result
 
 
+def test_chat_success_with_mocked_gemini(client):
+    headers = auth_headers(client)
+    with patch(
+        "app.routes.ai.generate_health_chat_response",
+        return_value="Test educational response.",
+    ):
+        response = client.post(
+            "/api/ai/chat",
+            headers=headers,
+            json={"message": "What is a healthy sleep routine?", "language": "en"},
+        )
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["response"] == "Test educational response."
+    assert len(data["conversation"]["messages"]) == 2
+    assert data["conversation"]["messages"][0]["sender"] == "user"
+    assert data["conversation"]["messages"][1]["sender"] == "assistant"
+
+
 def test_chat_rejects_oversized_message(client):
     headers = auth_headers(client)
     response = client.post(
@@ -123,3 +142,30 @@ def test_analyze_image_rejects_oversized_instruction(client):
         content_type="multipart/form-data",
     )
     assert response.status_code == 400
+
+
+def test_analyze_image_rejects_oversized_file(client):
+    headers = auth_headers(client)
+    with patch("app.routes.ai.MAX_DOCUMENT_SIZE", 4):
+        response = client.post(
+            "/api/ai/analyze-image",
+            headers=headers,
+            data={"image": (BytesIO(b"12345"), "file.png")},
+            content_type="multipart/form-data",
+        )
+    assert response.status_code == 413
+
+
+def test_chat_returns_service_unavailable_when_gemini_fails(client):
+    headers = auth_headers(client)
+    with patch(
+        "app.routes.ai.generate_health_chat_response",
+        side_effect=Exception("Gemini unavailable"),
+    ):
+        response = client.post(
+            "/api/ai/chat",
+            headers=headers,
+            json={"message": "test"},
+        )
+    assert response.status_code == 502
+    assert response.get_json()["message"] == "AI service is temporarily unavailable"
