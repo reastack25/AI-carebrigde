@@ -1,4 +1,5 @@
 import json
+import re
 
 from google import genai
 from google.genai import types
@@ -47,14 +48,17 @@ Symptoms: {symptoms}
 Age: {age or 'not provided'}
 Duration: {duration or 'not provided'}'''
     raw = _extract_text(client.models.generate_content(model="gemini-2.5-flash", contents=prompt))
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.IGNORECASE).strip()
     try:
-        result = json.loads(raw)
+        result = json.loads(cleaned)
     except json.JSONDecodeError as error:
         raise GeminiServiceError("Gemini returned an invalid symptom-check response") from error
     required = {"urgency", "summary", "possible_explanations", "next_steps", "red_flags", "disclaimer"}
     if set(result) != required or result["urgency"] not in {"routine", "soon", "urgent", "emergency"}:
         raise GeminiServiceError("Gemini returned an incomplete symptom-check response")
-    if not all(isinstance(result[key], list) for key in ("possible_explanations", "next_steps", "red_flags")):
+    if not isinstance(result["summary"], str) or not isinstance(result["disclaimer"], str):
+        raise GeminiServiceError("Gemini returned invalid symptom-check text")
+    if not all(isinstance(result[key], list) and all(isinstance(item, str) for item in result[key]) for key in ("possible_explanations", "next_steps", "red_flags")):
         raise GeminiServiceError("Gemini returned invalid symptom-check lists")
     return result
 
