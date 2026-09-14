@@ -32,8 +32,35 @@ def _conversation(user_id, conversation_id=None, title="Health conversation"):
 @jwt_required()
 def list_conversations():
     user_id = int(get_jwt_identity())
-    conversations = db.session.scalars(select(Conversation).where(Conversation.user_id == user_id).order_by(Conversation.created_at.desc())).all()
+    conversations = db.session.scalars(
+        select(Conversation)
+        .where(Conversation.user_id == user_id)
+        .order_by(Conversation.created_at.desc())
+    ).all()
     return jsonify({"conversations": [item.to_dict(include_messages=False) for item in conversations]}), 200
+
+
+@ai_bp.get("/timeline")
+@jwt_required()
+def health_timeline():
+    user_id = int(get_jwt_identity())
+    conversations = db.session.scalars(
+        select(Conversation)
+        .where(Conversation.user_id == user_id)
+        .order_by(Conversation.created_at.desc())
+        .limit(10)
+    ).all()
+    entries = []
+    for conversation in conversations:
+        messages = conversation.messages
+        entries.append({
+            "id": conversation.id,
+            "title": conversation.title,
+            "created_at": conversation.created_at.isoformat(),
+            "message_count": len(messages),
+            "last_message": messages[-1].content[:180] if messages else "No messages yet",
+        })
+    return jsonify({"timeline": entries}), 200
 
 
 @ai_bp.get("/conversations/<int:conversation_id>")
