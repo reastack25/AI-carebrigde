@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity, FileText, HeartPulse, LogOut, Pill, ShieldCheck } from "lucide-react";
+import { Activity, ArrowRight, FileText, HeartPulse, LogOut, Pill, ShieldCheck } from "lucide-react";
+import api from "../services/api";
 
 const tools = [
   { title: "AI Health Chat", description: "Ask health-information questions and receive clear, educational guidance.", icon: HeartPulse, path: "/health-chat" },
@@ -7,13 +9,29 @@ const tools = [
   { title: "Report Analyzer", description: "Turn complex medical reports into easier-to-understand summaries.", icon: FileText, path: "/report-analyzer" },
 ];
 
+function formatDate(value) {
+  return new Date(value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem("carebridge_user") || "{}");
+  const [timeline, setTimeline] = useState([]);
+  const [timelineLoading, setTimelineLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    api.get("/ai/timeline")
+      .then(({ data }) => { if (active) setTimeline(data.timeline || []); })
+      .catch(() => { if (active) setTimeline([]); })
+      .finally(() => { if (active) setTimelineLoading(false); });
+    return () => { active = false; };
+  }, []);
 
   const logout = () => {
     localStorage.removeItem("carebridge_token");
     localStorage.removeItem("carebridge_user");
+    localStorage.removeItem("carebridge_conversation_id");
     navigate("/login", { replace: true });
   };
 
@@ -22,6 +40,7 @@ export default function Dashboard() {
       <nav className="border-b border-slate-200 bg-white"><div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-8"><div><p className="text-xl font-bold tracking-tight text-cyan-700">CareBridge AI</p><p className="text-xs text-slate-500">Your healthcare companion</p></div><button onClick={logout} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"><LogOut size={16} /> Log out</button></div></nav>
       <section className="mx-auto max-w-7xl px-6 py-10 lg:px-8"><div className="rounded-3xl bg-gradient-to-br from-cyan-700 to-blue-800 p-8 text-white shadow-lg sm:p-10"><p className="text-sm font-semibold uppercase tracking-wider text-cyan-100">Patient dashboard</p><h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Hello, {user.name || "there"}.</h1><p className="mt-4 max-w-2xl text-sm leading-6 text-cyan-50 sm:text-base">Access your health-information tools, organize your records, and make more informed healthcare decisions.</p></div>
         <div className="mt-8 grid gap-5 md:grid-cols-3">{tools.map(({ title, description, icon: Icon, path }) => <article key={title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-50 text-cyan-700"><Icon size={22} /></div><h2 className="mt-5 text-lg font-semibold">{title}</h2><p className="mt-2 text-sm leading-6 text-slate-600">{description}</p><button onClick={() => navigate(path)} className="mt-5 rounded-full bg-cyan-700 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white hover:bg-cyan-800">Open tool</button></article>)}</div>
+        <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><div className="flex items-center justify-between gap-4"><div><h2 className="text-xl font-semibold">Recent health activity</h2><p className="mt-1 text-sm text-slate-500">Your latest saved conversations and document analyses.</p></div><Activity className="text-cyan-700" size={22} /></div>{timelineLoading ? <p className="mt-6 text-sm text-slate-500">Loading your timeline...</p> : timeline.length === 0 ? <div className="mt-6 rounded-xl bg-slate-50 p-5 text-sm text-slate-600">No activity yet. Start a health chat or analyze a document to create your first timeline entry.</div> : <div className="mt-5 space-y-3">{timeline.map((entry) => <button key={entry.id} onClick={() => { localStorage.setItem("carebridge_conversation_id", String(entry.id)); navigate("/health-chat"); }} className="flex w-full items-center justify-between gap-4 rounded-xl border border-slate-200 p-4 text-left transition hover:border-cyan-300 hover:bg-cyan-50"><div className="min-w-0"><p className="font-medium text-slate-900">{entry.title}</p><p className="mt-1 truncate text-sm text-slate-600">{entry.last_message}</p><p className="mt-2 text-xs text-slate-400">{formatDate(entry.created_at)} · {entry.message_count} messages</p></div><ArrowRight className="shrink-0 text-cyan-700" size={18} /></button>)}</div>}</section>
         <div className="mt-8 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-900"><ShieldCheck className="mt-0.5 shrink-0" size={20} /><div><h2 className="font-semibold">Your privacy matters</h2><p className="mt-1 text-sm leading-6 text-emerald-800">CareBridge AI provides educational support and does not replace a qualified healthcare professional or emergency services.</p></div></div><div className="mt-8 flex items-center gap-3 text-sm text-slate-500"><Activity size={18} /><span>Your secure workspace is ready for the next development phase.</span></div>
       </section>
     </main>
