@@ -9,6 +9,9 @@ from ..services.gemini_service import GeminiServiceError, analyze_health_documen
 ai_bp = Blueprint("ai", __name__, url_prefix="/api/ai")
 SUPPORTED_LANGUAGES = {"en", "sw", "luo", "kik", "kal"}
 ALLOWED_DOCUMENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"}
+MAX_MESSAGE_LENGTH = 4000
+MAX_INSTRUCTION_LENGTH = 1000
+MAX_DOCUMENT_SIZE = 10 * 1024 * 1024
 
 
 def _language():
@@ -72,7 +75,7 @@ def health_chat():
     message = str(data.get("message", "")).strip()
     if not message:
         return jsonify({"message": "message is required"}), 400
-    if len(message) > 4000:
+    if len(message) > MAX_MESSAGE_LENGTH:
         return jsonify({"message": "message must not exceed 4000 characters"}), 400
     try:
         conversation_id = _conversation_id(data.get("conversation_id"))
@@ -106,7 +109,7 @@ def symptom_check():
     duration = str(data.get("duration", "")).strip()
     if not symptoms:
         return jsonify({"message": "symptoms are required"}), 400
-    if len(symptoms) > 4000:
+    if len(symptoms) > MAX_MESSAGE_LENGTH:
         return jsonify({"message": "symptoms must not exceed 4000 characters"}), 400
     if age and (not age.isdigit() or not 0 < int(age) <= 120):
         return jsonify({"message": "age must be a number between 1 and 120"}), 400
@@ -139,9 +142,12 @@ def analyze_image():
     uploaded_file = request.files.get("image")
     instruction = request.form.get("instruction", "").strip()
     language = _language()
-    conversation_id = request.form.get("conversation_id", "").strip()
-    if conversation_id and not conversation_id.isdigit():
-        return jsonify({"message": "conversation_id must be an integer"}), 400
+    try:
+        conversation_id = _conversation_id(request.form.get("conversation_id", "").strip())
+    except ValueError as error:
+        return jsonify({"message": str(error)}), 400
+    if len(instruction) > MAX_INSTRUCTION_LENGTH:
+        return jsonify({"message": "instruction must not exceed 1000 characters"}), 400
     if not uploaded_file or not uploaded_file.filename:
         return jsonify({"message": "document file is required"}), 400
     mime_type = uploaded_file.mimetype or ""
@@ -150,12 +156,12 @@ def analyze_image():
     file_bytes = uploaded_file.read()
     if not file_bytes:
         return jsonify({"message": "uploaded document is empty"}), 400
-    if len(file_bytes) > 10 * 1024 * 1024:
+    if len(file_bytes) > MAX_DOCUMENT_SIZE:
         return jsonify({"message": "document must not exceed 10 MB"}), 413
     user_id = int(get_jwt_identity())
     try:
         response = analyze_health_document(file_bytes, mime_type, instruction, language)
-        conversation = _conversation(user_id, int(conversation_id) if conversation_id else None, f"Document analysis: {uploaded_file.filename}")
+        conversation = _conversation(user_id, conversation_id, f"Document analysis: {uploaded_file.filename}")
         if not conversation:
             return jsonify({"message": "conversation not found"}), 404
         user_content = f"Document uploaded: {uploaded_file.filename}" + (f"\nInstruction: {instruction}" if instruction else "")
