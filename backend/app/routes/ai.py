@@ -11,6 +11,7 @@ SUPPORTED_LANGUAGES = {"en", "sw", "luo", "kik", "kal"}
 ALLOWED_DOCUMENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"}
 MAX_MESSAGE_LENGTH = 4000
 MAX_INSTRUCTION_LENGTH = 1000
+MAX_DURATION_LENGTH = 200
 MAX_DOCUMENT_SIZE = 10 * 1024 * 1024
 
 
@@ -111,6 +112,8 @@ def symptom_check():
         return jsonify({"message": "symptoms are required"}), 400
     if len(symptoms) > MAX_MESSAGE_LENGTH:
         return jsonify({"message": "symptoms must not exceed 4000 characters"}), 400
+    if len(duration) > MAX_DURATION_LENGTH:
+        return jsonify({"message": "duration must not exceed 200 characters"}), 400
     if age and (not age.isdigit() or not 0 < int(age) <= 120):
         return jsonify({"message": "age must be a number between 1 and 120"}), 400
     try:
