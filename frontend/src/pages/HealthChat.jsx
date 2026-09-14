@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, FileImage, HeartPulse, LoaderCircle, Send, ShieldCheck, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, FileImage, HeartPulse, LoaderCircle, MessageSquareText, Send, ShieldCheck, Trash2, Upload } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 
@@ -14,13 +14,28 @@ export default function HealthChat() {
   const [instruction, setInstruction] = useState("");
   const [language, setLanguage] = useState("en");
   const [conversationId, setConversationId] = useState(() => localStorage.getItem(CONVERSATION_KEY));
+  const [conversations, setConversations] = useState([]);
   const [messages, setMessages] = useState(() => {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); } catch { return []; }
   });
   const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); }, [messages]);
+
+  const loadConversations = async () => {
+    try {
+      const response = await api.get("/ai/conversations");
+      setConversations(response.data.conversations || []);
+    } catch {
+      setConversations([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => { loadConversations(); }, []);
 
   useEffect(() => {
     const restoreConversation = async () => {
@@ -36,6 +51,13 @@ export default function HealthChat() {
     };
     restoreConversation();
   }, [conversationId]);
+
+  const selectConversation = (id) => {
+    if (loading) return;
+    setError("");
+    setConversationId(String(id));
+    localStorage.setItem(CONVERSATION_KEY, String(id));
+  };
 
   const clearConversation = () => {
     if (loading) return;
@@ -69,16 +91,13 @@ export default function HealthChat() {
         setMessages((current) => [...current, { role: "user", text: trimmed || `Image uploaded: ${image.name}` }, { role: "assistant", text: response.data.response }]);
       } else {
         setMessages((current) => [...current, { role: "user", text: trimmed }]);
-        const response = await api.post("/ai/chat", {
-          message: trimmed,
-          language,
-          ...(conversationId ? { conversation_id: Number(conversationId) } : {}),
-        });
+        const response = await api.post("/ai/chat", { message: trimmed, language, ...(conversationId ? { conversation_id: Number(conversationId) } : {}) });
         saveConversationId(response.data.conversation?.id);
         setMessages((current) => [...current, { role: "assistant", text: response.data.response }]);
       }
       setMessage(""); setInstruction(""); setImage(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+      await loadConversations();
     } catch (requestError) {
       setError(requestError.response?.data?.message || "The AI service is temporarily unavailable.");
     } finally { setLoading(false); }
@@ -86,13 +105,14 @@ export default function HealthChat() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
-      <nav className="border-b border-slate-200 bg-white"><div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-6 py-4"><button onClick={() => navigate("/dashboard")} className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-cyan-700"><ArrowLeft size={17} /> Back to dashboard</button><div className="flex items-center gap-2 font-bold text-cyan-700"><HeartPulse size={20} /> CareBridge AI</div></div></nav>
-      <section className="mx-auto flex max-w-4xl flex-col px-6 py-8">
-        <div className="rounded-3xl bg-gradient-to-br from-cyan-700 to-blue-800 p-7 text-white"><p className="text-sm font-semibold uppercase tracking-wider text-cyan-100">AI health chat</p><h1 className="mt-2 text-3xl font-bold">Ask a question or analyze an image</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-cyan-50">Get cautious educational guidance in your preferred language.</p></div>
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3"><label className="text-sm font-semibold text-slate-700">Response language<select value={language} onChange={(event) => setLanguage(event.target.value)} className="ml-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal"><option value="en">English</option><option value="sw">Kiswahili</option><option value="luo">Dholuo</option><option value="kik">Kikuyu</option><option value="kal">Kalenjin</option></select></label><button onClick={clearConversation} disabled={!messages.length || loading} className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-500 hover:bg-white hover:text-red-600 disabled:opacity-40"><Trash2 size={16} /> New conversation</button></div>
+      <nav className="border-b border-slate-200 bg-white"><div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4"><button onClick={() => navigate("/dashboard")} className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-cyan-700"><ArrowLeft size={17} /> Back to dashboard</button><div className="flex items-center gap-2 font-bold text-cyan-700"><HeartPulse size={20} /> CareBridge AI</div></div></nav>
+      <section className="mx-auto grid max-w-6xl gap-5 px-6 py-8 lg:grid-cols-[260px_1fr]">
+        <aside className="h-fit rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex items-center justify-between"><h2 className="font-semibold text-slate-800">History</h2><MessageSquareText size={18} className="text-cyan-700" /></div><button onClick={clearConversation} disabled={loading} className="mt-3 w-full rounded-xl bg-cyan-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">+ New conversation</button><div className="mt-4 space-y-2">{historyLoading && <p className="text-xs text-slate-500">Loading history...</p>}{!historyLoading && conversations.length === 0 && <p className="text-xs leading-5 text-slate-500">Saved conversations will appear here.</p>}{conversations.map((conversation) => <button key={conversation.id} onClick={() => selectConversation(conversation.id)} className={`w-full rounded-xl px-3 py-3 text-left text-sm transition ${String(conversation.id) === String(conversationId) ? "bg-cyan-50 text-cyan-800 ring-1 ring-cyan-200" : "text-slate-600 hover:bg-slate-50"}`}><span className="block truncate font-medium">{conversation.title}</span><span className="mt-1 block text-xs text-slate-400">{new Date(conversation.created_at).toLocaleDateString()}</span></button>)}</div></aside>
+        <div className="min-w-0"><div className="rounded-3xl bg-gradient-to-br from-cyan-700 to-blue-800 p-7 text-white"><p className="text-sm font-semibold uppercase tracking-wider text-cyan-100">AI health chat</p><h1 className="mt-2 text-3xl font-bold">Ask a question or analyze an image</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-cyan-50">Get cautious educational guidance in your preferred language.</p></div>
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3"><label className="text-sm font-semibold text-slate-700">Response language<select value={language} onChange={(event) => setLanguage(event.target.value)} className="ml-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal"><option value="en">English</option><option value="sw">Kiswahili</option><option value="luo">Dholuo</option><option value="kik">Kikuyu</option><option value="kal">Kalenjin</option></select></label><button onClick={clearConversation} disabled={!messages.length || loading} className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-500 hover:bg-white hover:text-red-600 disabled:opacity-40"><Trash2 size={16} /> Clear current</button></div>
         <div className="mt-2 min-h-80 space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">{messages.length === 0 && <p className="py-16 text-center text-sm text-slate-500">Your conversation will appear here and remain available after refresh.</p>}{messages.map((item, index) => <div key={`${item.role}-${index}`} className={`flex ${item.role === "user" ? "justify-end" : "justify-start"}`}><div className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-6 ${item.role === "user" ? "bg-cyan-700 text-white" : "bg-slate-100 text-slate-800"}`}>{item.text}</div></div>)}{loading && <div className="flex items-center gap-2 text-sm text-slate-500"><LoaderCircle className="animate-spin" size={17} /> CareBridge is analyzing...</div>}{error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}</div>
         <form onSubmit={submitMessage} className="mt-4 space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">{image && <div className="flex items-center justify-between rounded-xl bg-cyan-50 px-3 py-2 text-sm text-cyan-900"><span className="flex min-w-0 items-center gap-2"><FileImage size={17} /><span className="truncate">{image.name}</span></span><button type="button" onClick={() => { setImage(null); if (fileInputRef.current) fileInputRef.current.value = ""; }} className="font-semibold">Remove</button></div>}<div className="flex flex-wrap gap-2"><label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:border-cyan-500"><Upload size={17} /> Upload image<input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" className="hidden" onChange={(event) => setImage(event.target.files?.[0] || null)} /></label>{image && <input value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="What should I explain about this image?" className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-cyan-600" />}</div><div className="flex gap-3"><input value={message} onChange={(event) => setMessage(event.target.value)} maxLength={4000} placeholder="Ask a health-information question..." className="min-w-0 flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" /><button disabled={loading || (!message.trim() && !image)} className="inline-flex items-center gap-2 rounded-xl bg-cyan-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"><Send size={17} /> Send</button></div></form>
-        <div className="mt-5 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900"><ShieldCheck size={18} className="mt-1 shrink-0" /> Seek urgent medical care for severe or life-threatening symptoms. Do not use this tool as a substitute for a clinician.</div>
+        <div className="mt-5 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900"><ShieldCheck size={18} className="mt-1 shrink-0" /> Seek urgent medical care for severe or life-threatening symptoms. Do not use this tool as a substitute for a clinician.</div></div>
       </section>
     </main>
   );
