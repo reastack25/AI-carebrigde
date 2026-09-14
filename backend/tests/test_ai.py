@@ -31,6 +31,17 @@ def test_symptom_check_rejects_invalid_age(client):
     assert response.status_code == 400
 
 
+def test_symptom_check_rejects_oversized_duration(client):
+    headers = auth_headers(client)
+    response = client.post(
+        "/api/ai/symptom-check",
+        headers=headers,
+        json={"symptoms": "headache", "duration": "x" * 201},
+    )
+    assert response.status_code == 400
+    assert response.get_json()["message"] == "duration must not exceed 200 characters"
+
+
 def test_symptom_check_rejects_invalid_conversation_id(client):
     headers = auth_headers(client)
     response = client.post(
