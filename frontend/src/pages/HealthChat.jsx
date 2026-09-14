@@ -46,6 +46,12 @@ export default function HealthChat() {
     localStorage.removeItem(CONVERSATION_KEY);
   };
 
+  const saveConversationId = (id) => {
+    if (!id) return;
+    setConversationId(String(id));
+    localStorage.setItem(CONVERSATION_KEY, String(id));
+  };
+
   const submitMessage = async (event) => {
     event.preventDefault();
     const trimmed = message.trim();
@@ -57,7 +63,9 @@ export default function HealthChat() {
         formData.append("image", image);
         formData.append("instruction", instruction.trim() || trimmed);
         formData.append("language", language);
+        if (conversationId) formData.append("conversation_id", conversationId);
         const response = await api.post("/ai/analyze-image", formData);
+        saveConversationId(response.data.conversation?.id);
         setMessages((current) => [...current, { role: "user", text: trimmed || `Image uploaded: ${image.name}` }, { role: "assistant", text: response.data.response }]);
       } else {
         setMessages((current) => [...current, { role: "user", text: trimmed }]);
@@ -66,11 +74,7 @@ export default function HealthChat() {
           language,
           ...(conversationId ? { conversation_id: Number(conversationId) } : {}),
         });
-        const savedConversationId = response.data.conversation?.id;
-        if (savedConversationId) {
-          setConversationId(String(savedConversationId));
-          localStorage.setItem(CONVERSATION_KEY, String(savedConversationId));
-        }
+        saveConversationId(response.data.conversation?.id);
         setMessages((current) => [...current, { role: "assistant", text: response.data.response }]);
       }
       setMessage(""); setInstruction(""); setImage(null);
