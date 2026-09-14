@@ -4,7 +4,7 @@ from sqlalchemy import select
 
 from ..extensions import db
 from ..models import Conversation, Message
-from ..services.gemini_service import GeminiServiceError, analyze_health_document, generate_health_chat_response
+from ..services.gemini_service import GeminiServiceError, analyze_health_document, generate_health_chat_response, generate_symptom_check_response
 
 ai_bp = Blueprint("ai", __name__, url_prefix="/api/ai")
 SUPPORTED_LANGUAGES = {"en", "sw", "luo", "kik", "kal"}
@@ -32,11 +32,7 @@ def _conversation(user_id, conversation_id=None, title="Health conversation"):
 @jwt_required()
 def list_conversations():
     user_id = int(get_jwt_identity())
-    conversations = db.session.scalars(
-        select(Conversation)
-        .where(Conversation.user_id == user_id)
-        .order_by(Conversation.created_at.desc())
-    ).all()
+    conversations = db.session.scalars(select(Conversation).where(Conversation.user_id == user_id).order_by(Conversation.created_at.desc())).all()
     return jsonify({"conversations": [item.to_dict(include_messages=False) for item in conversations]}), 200
 
 
@@ -44,22 +40,11 @@ def list_conversations():
 @jwt_required()
 def health_timeline():
     user_id = int(get_jwt_identity())
-    conversations = db.session.scalars(
-        select(Conversation)
-        .where(Conversation.user_id == user_id)
-        .order_by(Conversation.created_at.desc())
-        .limit(10)
-    ).all()
+    conversations = db.session.scalars(select(Conversation).where(Conversation.user_id == user_id).order_by(Conversation.created_at.desc()).limit(10)).all()
     entries = []
     for conversation in conversations:
         messages = conversation.messages
-        entries.append({
-            "id": conversation.id,
-            "title": conversation.title,
-            "created_at": conversation.created_at.isoformat(),
-            "message_count": len(messages),
-            "last_message": messages[-1].content[:180] if messages else "No messages yet",
-        })
+        entries.append({"id": conversation.id, "title": conversation.title, "created_at": conversation.created_at.isoformat(), "message_count": len(messages), "last_message": messages[-1].content[:180] if messages else "No messages yet"})
     return jsonify({"timeline": entries}), 200
 
 
@@ -76,7 +61,7 @@ def get_conversation(conversation_id):
 @jwt_required()
 def health_chat():
     data = request.get_json(silent=True) or {}
-    message = data.get("message", "").strip()
+    message = str(data.get("message", "")).strip()
     if not message:
         return jsonify({"message": "message is required"}), 400
     if len(message) > 4000:
@@ -98,6 +83,38 @@ def health_chat():
         db.session.rollback()
         return jsonify({"message": "AI service is temporarily unavailable"}), 502
     return jsonify({"response": response, "conversation": conversation.to_dict()}), 200
+
+
+@ai_bp.post("/symptom-check")
+@jwt_required()
+def symptom_check():
+    data = request.get_json(silent=True) or {}
+    symptoms = str(data.get("symptoms", "")).strip()
+    age = str(data.get("age", "")).strip()
+    duration = str(data.get("duration", "")).strip()
+    if not symptoms:
+        return jsonify({"message": "symptoms are required"}), 400
+    if len(symptoms) > 4000:
+        return jsonify({"message": "symptoms must not exceed 4000 characters"}), 400
+    if age and (not age.isdigit() or not 0 < int(age) <= 120):
+        return jsonify({"message": "age must be a number between 1 and 120"}), 400
+    language = data.get("language", "en") if data.get("language", "en") in SUPPORTED_LANGUAGES else "en"
+    user_id = int(get_jwt_identity())
+    try:
+        result = generate_symptom_check_response(symptoms, age, duration, language)
+        conversation = _conversation(user_id, data.get("conversation_id"), "Symptom check")
+        if not conversation:
+            return jsonify({"message": "conversation not found"}), 404
+        db.session.add(Message(conversation_id=conversation.id, sender="user", content=f"Symptoms: {symptoms}", language=language))
+        db.session.add(Message(conversation_id=conversation.id, sender="assistant", content=result["summary"], language=language))
+        db.session.commit()
+        return jsonify({"result": result, "conversation": conversation.to_dict()}), 200
+    except GeminiServiceError as error:
+        db.session.rollback()
+        return jsonify({"message": str(error)}), 503
+    except Exception:
+        db.session.rollback()
+        return jsonify({"message": "AI symptom checking is temporarily unavailable"}), 502
 
 
 @ai_bp.post("/analyze-image")
@@ -125,9 +142,7 @@ def analyze_image():
         conversation = _conversation(user_id, int(conversation_id) if conversation_id else None, f"Document analysis: {uploaded_file.filename}")
         if not conversation:
             return jsonify({"message": "conversation not found"}), 404
-        user_content = f"Document uploaded: {uploaded_file.filename}"
-        if instruction:
-            user_content += f"\nInstruction: {instruction}"
+        user_content = f"Document uploaded: {uploaded_file.filename}" + (f"\nInstruction: {instruction}" if instruction else "")
         db.session.add(Message(conversation_id=conversation.id, sender="user", content=user_content, language=language))
         db.session.add(Message(conversation_id=conversation.id, sender="assistant", content=response, language=language))
         db.session.commit()
