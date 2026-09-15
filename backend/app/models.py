@@ -58,6 +58,64 @@ class Message(db.Model):
         return {"id": self.id, "sender": self.sender, "content": self.content, "language": self.language, "created_at": self.created_at.isoformat()}
 
 
+class SymptomCheck(db.Model):
+    __tablename__ = "symptom_checks"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey("conversations.id"), nullable=True, index=True)
+    symptoms = db.Column(db.Text, nullable=False)
+    age = db.Column(db.Integer, nullable=True)
+    duration = db.Column(db.String(200), nullable=True)
+    urgency = db.Column(db.String(30), nullable=False)
+    summary = db.Column(db.Text, nullable=False)
+    possible_explanations = db.Column(db.JSON, nullable=False, default=list)
+    next_steps = db.Column(db.JSON, nullable=False, default=list)
+    red_flags = db.Column(db.JSON, nullable=False, default=list)
+    language = db.Column(db.String(10), nullable=False, default="en")
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "conversation_id": self.conversation_id,
+            "symptoms": self.symptoms,
+            "age": self.age,
+            "duration": self.duration,
+            "urgency": self.urgency,
+            "summary": self.summary,
+            "possible_explanations": self.possible_explanations or [],
+            "next_steps": self.next_steps or [],
+            "red_flags": self.red_flags or [],
+            "language": self.language,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+class MedicalReport(db.Model):
+    __tablename__ = "medical_reports"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey("conversations.id"), nullable=True, index=True)
+    filename = db.Column(db.String(255), nullable=False)
+    mime_type = db.Column(db.String(100), nullable=False)
+    instruction = db.Column(db.String(1000), nullable=True)
+    summary = db.Column(db.Text, nullable=False)
+    language = db.Column(db.String(10), nullable=False, default="en")
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "conversation_id": self.conversation_id,
+            "filename": self.filename,
+            "mime_type": self.mime_type,
+            "instruction": self.instruction or "",
+            "summary": self.summary,
+            "language": self.language,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
 class HealthTimelineEvent(db.Model):
     __tablename__ = "health_timeline_events"
     id = db.Column(db.Integer, primary_key=True)
