@@ -43,10 +43,7 @@ def _conversation_id(value):
 
 
 def _chat_history(conversation):
-    return [
-        {"sender": message.sender, "content": message.content}
-        for message in conversation.messages[-MAX_CHAT_HISTORY:]
-    ]
+    return [{"sender": message.sender, "content": message.content} for message in conversation.messages[-MAX_CHAT_HISTORY:]]
 
 
 def _timeline_event(user_id, event_type, title, summary, conversation_id=None, metadata=None):
@@ -86,9 +83,7 @@ def health_timeline():
 @jwt_required()
 def list_symptom_checks():
     user_id = int(get_jwt_identity())
-    records = db.session.scalars(
-        select(SymptomCheck).where(SymptomCheck.user_id == user_id).order_by(SymptomCheck.created_at.desc()).limit(MAX_TIMELINE_EVENTS)
-    ).all()
+    records = db.session.scalars(select(SymptomCheck).where(SymptomCheck.user_id == user_id).order_by(SymptomCheck.created_at.desc()).limit(MAX_TIMELINE_EVENTS)).all()
     return jsonify({"symptom_checks": [record.to_dict() for record in records]}), 200
 
 
@@ -96,9 +91,7 @@ def list_symptom_checks():
 @jwt_required()
 def list_medical_reports():
     user_id = int(get_jwt_identity())
-    records = db.session.scalars(
-        select(MedicalReport).where(MedicalReport.user_id == user_id).order_by(MedicalReport.created_at.desc()).limit(MAX_TIMELINE_EVENTS)
-    ).all()
+    records = db.session.scalars(select(MedicalReport).where(MedicalReport.user_id == user_id).order_by(MedicalReport.created_at.desc()).limit(MAX_TIMELINE_EVENTS)).all()
     return jsonify({"medical_reports": [record.to_dict() for record in records]}), 200
 
 
@@ -186,6 +179,7 @@ def symptom_check():
             language=language,
         )
         db.session.add(record)
+        db.session.flush()
         _timeline_event(
             user_id,
             "symptom_check",
