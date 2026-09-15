@@ -75,20 +75,7 @@ class SymptomCheck(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
 
     def to_dict(self):
-        return {
-            "id": self.id,
-            "conversation_id": self.conversation_id,
-            "symptoms": self.symptoms,
-            "age": self.age,
-            "duration": self.duration,
-            "urgency": self.urgency,
-            "summary": self.summary,
-            "possible_explanations": self.possible_explanations or [],
-            "next_steps": self.next_steps or [],
-            "red_flags": self.red_flags or [],
-            "language": self.language,
-            "created_at": self.created_at.isoformat(),
-        }
+        return {"id": self.id, "conversation_id": self.conversation_id, "symptoms": self.symptoms, "age": self.age, "duration": self.duration, "urgency": self.urgency, "summary": self.summary, "possible_explanations": self.possible_explanations or [], "next_steps": self.next_steps or [], "red_flags": self.red_flags or [], "language": self.language, "created_at": self.created_at.isoformat()}
 
 
 class MedicalReport(db.Model):
@@ -104,16 +91,26 @@ class MedicalReport(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
 
     def to_dict(self):
-        return {
-            "id": self.id,
-            "conversation_id": self.conversation_id,
-            "filename": self.filename,
-            "mime_type": self.mime_type,
-            "instruction": self.instruction or "",
-            "summary": self.summary,
-            "language": self.language,
-            "created_at": self.created_at.isoformat(),
-        }
+        return {"id": self.id, "conversation_id": self.conversation_id, "filename": self.filename, "mime_type": self.mime_type, "instruction": self.instruction or "", "summary": self.summary, "language": self.language, "created_at": self.created_at.isoformat()}
+
+
+class Medication(db.Model):
+    __tablename__ = "medications"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey("conversations.id"), nullable=True, index=True)
+    name = db.Column(db.String(255), nullable=False)
+    dosage = db.Column(db.String(255), nullable=True)
+    frequency = db.Column(db.String(255), nullable=True)
+    duration = db.Column(db.String(255), nullable=True)
+    instructions = db.Column(db.Text, nullable=True)
+    warnings = db.Column(db.JSON, nullable=False, default=list)
+    source_filename = db.Column(db.String(255), nullable=True)
+    language = db.Column(db.String(10), nullable=False, default="en")
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
+
+    def to_dict(self):
+        return {"id": self.id, "conversation_id": self.conversation_id, "name": self.name, "dosage": self.dosage or "", "frequency": self.frequency or "", "duration": self.duration or "", "instructions": self.instructions or "", "warnings": self.warnings or [], "source_filename": self.source_filename or "", "language": self.language, "created_at": self.created_at.isoformat()}
 
 
 class HealthTimelineEvent(db.Model):
@@ -128,12 +125,4 @@ class HealthTimelineEvent(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
 
     def to_dict(self):
-        return {
-            "id": self.id,
-            "event_type": self.event_type,
-            "title": self.title,
-            "summary": self.summary,
-            "metadata": self.event_metadata or {},
-            "conversation_id": self.conversation_id,
-            "created_at": self.created_at.isoformat(),
-        }
+        return {"id": self.id, "event_type": self.event_type, "title": self.title, "summary": self.summary, "metadata": self.event_metadata or {}, "conversation_id": self.conversation_id, "created_at": self.created_at.isoformat()}
