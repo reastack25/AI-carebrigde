@@ -13,8 +13,9 @@ from .routes.medications import medications_bp
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
+    config_class.validate()
 
-    CORS(app, origins=app.config["CORS_ORIGINS"].split(","))
+    CORS(app, origins=config_class.cors_origins())
     db.init_app(app)
     jwt.init_app(app)
     migrate.init_app(app, db)
