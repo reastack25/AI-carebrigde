@@ -70,8 +70,8 @@ def test_symptom_check_creates_timeline_event(client, app):
         event = HealthTimelineEvent.query.one()
         assert event.event_type == "symptom_check"
         assert event.summary == result["summary"]
-        assert event.metadata["urgency"] == "soon"
-        assert event.metadata["language"] == "sw"
+        assert event.event_metadata["urgency"] == "soon"
+        assert event.event_metadata["language"] == "sw"
 
 
 def test_chat_success_with_mocked_gemini(client):
@@ -97,6 +97,7 @@ def test_chat_creates_timeline_event(client, app):
         assert event.event_type == "health_chat"
         assert event.summary == "Saved health response."
         assert event.conversation_id == response.get_json()["conversation"]["id"]
+        assert event.event_metadata == {"language": "en"}
 
 
 def test_chat_passes_recent_history_to_gemini(client):
@@ -163,8 +164,8 @@ def test_document_analysis_creates_timeline_event(client, app):
         event = HealthTimelineEvent.query.one()
         assert event.event_type == "document_analysis"
         assert event.summary == "Report summary saved."
-        assert event.metadata["filename"] == "report.png"
-        assert event.metadata["mime_type"] == "image/png"
+        assert event.event_metadata["filename"] == "report.png"
+        assert event.event_metadata["mime_type"] == "image/png"
 
 
 def test_timeline_is_user_isolated_and_filterable(client):
@@ -180,6 +181,7 @@ def test_timeline_is_user_isolated_and_filterable(client):
     assert len(data) == 1
     assert data[0]["summary"] == "Private event"
     assert data[0]["event_type"] == "health_chat"
+    assert data[0]["metadata"] == {"language": "en"}
     filtered = client.get("/api/ai/timeline?type=symptom_check", headers=first_headers)
     assert filtered.status_code == 200
     assert filtered.get_json()["timeline"] == []
