@@ -11,12 +11,22 @@ from app.extensions import db
 
 class TestConfig:
     TESTING = True
+    APP_ENV = "test"
     SECRET_KEY = "test-secret"
     JWT_SECRET_KEY = "test-jwt-secret"
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     CORS_ORIGINS = "http://localhost:5173"
     GEMINI_API_KEY = "test-key"
+    JWT_ACCESS_TOKEN_EXPIRES = 3600
+
+    @classmethod
+    def validate(cls):
+        return None
+
+    @classmethod
+    def cors_origins(cls):
+        return ["http://localhost:5173"]
 
 
 @pytest.fixture()
