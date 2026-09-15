@@ -12,12 +12,15 @@ class User(db.Model):
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), nullable=False, default="patient")
+    specialty = db.Column(db.String(120), nullable=True)
+    license_number = db.Column(db.String(120), nullable=True)
+    facility = db.Column(db.String(160), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     def set_password(self, password): self.password_hash = generate_password_hash(password)
     def check_password(self, password): return check_password_hash(self.password_hash, password)
     def to_dict(self):
-        return {"id": self.id, "name": self.name, "email": self.email, "role": self.role, "created_at": self.created_at.isoformat()}
+        return {"id": self.id, "name": self.name, "email": self.email, "role": self.role, "specialty": self.specialty or "", "license_number": self.license_number or "", "facility": self.facility or "", "created_at": self.created_at.isoformat()}
 
 
 class Patient(db.Model):
