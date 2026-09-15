@@ -41,6 +41,45 @@ def test_doctor_can_read_records_only_with_active_consent(client):
     assert allowed.get_json()["records"]["medical_reports"] == []
 
 
+def test_doctor_can_add_record_level_review(client, app):
+    patient = login(client, "target-patient@example.com", "patient")
+    doctor = login(client, "target-doctor@example.com", "doctor")
+    patient_id = user_id(client, patient)
+    doctor_id = user_id(client, doctor)
+    assert client.post("/api/clinical/consents", headers=headers(patient), json={"doctor_id": doctor_id}).status_code == 201
+    with app.app_context():
+        from app.extensions import db
+        from app.models import SymptomCheck
+        symptom = SymptomCheck(user_id=patient_id, symptoms="headache and fatigue", urgency="routine", summary="Needs clinician review", language="en")
+        db.session.add(symptom)
+        db.session.commit()
+        symptom_id = symptom.id
+    response = client.post(f"/api/clinical/patients/{patient_id}/reviews", headers=headers(doctor), json={"record_type": "symptom_check", "record_id": symptom_id, "note": "Review symptom progression and clinical history.", "status": "follow_up"})
+    assert response.status_code == 201
+    review = response.get_json()["review"]
+    assert review["record_type"] == "symptom_check"
+    assert review["record_id"] == symptom_id
+
+
+def test_record_level_review_rejects_other_patient_record(client, app):
+    patient = login(client, "owner-patient@example.com", "patient")
+    other_patient = login(client, "other-patient@example.com", "patient")
+    doctor = login(client, "targeted-doctor@example.com", "doctor")
+    patient_id = user_id(client, patient)
+    other_id = user_id(client, other_patient)
+    doctor_id = user_id(client, doctor)
+    assert client.post("/api/clinical/consents", headers=headers(patient), json={"doctor_id": doctor_id}).status_code == 201
+    with app.app_context():
+        from app.extensions import db
+        from app.models import SymptomCheck
+        symptom = SymptomCheck(user_id=other_id, symptoms="private record", urgency="routine", summary="Other patient", language="en")
+        db.session.add(symptom)
+        db.session.commit()
+        symptom_id = symptom.id
+    response = client.post(f"/api/clinical/patients/{patient_id}/reviews", headers=headers(doctor), json={"record_type": "symptom_check", "record_id": symptom_id, "note": "Should not access this record."})
+    assert response.status_code == 404
+
+
 def test_doctor_can_add_review_and_patient_can_read_it(client):
     patient = login(client, "review-patient@example.com", "patient")
     doctor = login(client, "review-doctor@example.com", "doctor")
