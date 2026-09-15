@@ -3,7 +3,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy import select
 
 from ..extensions import db
-from ..models import Conversation, Message
+from ..models import Conversation, HealthTimelineEvent, Message
 from ..services.gemini_service import GeminiServiceError, analyze_health_document, generate_health_chat_response, generate_symptom_check_response
 
 ai_bp = Blueprint("ai", __name__, url_prefix="/api/ai")
@@ -14,6 +14,7 @@ MAX_INSTRUCTION_LENGTH = 1000
 MAX_DURATION_LENGTH = 200
 MAX_DOCUMENT_SIZE = 10 * 1024 * 1024
 MAX_CHAT_HISTORY = 12
+MAX_TIMELINE_EVENTS = 50
 
 
 def _language():
@@ -48,6 +49,19 @@ def _chat_history(conversation):
     ]
 
 
+def _timeline_event(user_id, event_type, title, summary, conversation_id=None, metadata=None):
+    db.session.add(
+        HealthTimelineEvent(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            event_type=event_type,
+            title=title[:200],
+            summary=summary.strip()[:10000],
+            metadata=metadata or {},
+        )
+    )
+
+
 @ai_bp.get("/conversations")
 @jwt_required()
 def list_conversations():
@@ -60,12 +74,12 @@ def list_conversations():
 @jwt_required()
 def health_timeline():
     user_id = int(get_jwt_identity())
-    conversations = db.session.scalars(select(Conversation).where(Conversation.user_id == user_id).order_by(Conversation.created_at.desc()).limit(10)).all()
-    entries = []
-    for conversation in conversations:
-        messages = conversation.messages
-        entries.append({"id": conversation.id, "title": conversation.title, "created_at": conversation.created_at.isoformat(), "message_count": len(messages), "last_message": messages[-1].content[:180] if messages else "No messages yet"})
-    return jsonify({"timeline": entries}), 200
+    event_type = request.args.get("type", "").strip()
+    query = select(HealthTimelineEvent).where(HealthTimelineEvent.user_id == user_id)
+    if event_type:
+        query = query.where(HealthTimelineEvent.event_type == event_type)
+    events = db.session.scalars(query.order_by(HealthTimelineEvent.created_at.desc()).limit(MAX_TIMELINE_EVENTS)).all()
+    return jsonify({"timeline": [event.to_dict() for event in events]}), 200
 
 
 @ai_bp.get("/conversations/<int:conversation_id>")
@@ -99,6 +113,7 @@ def health_chat():
         response = generate_health_chat_response(message, language, _chat_history(conversation))
         db.session.add(Message(conversation_id=conversation.id, sender="user", content=message, language=language))
         db.session.add(Message(conversation_id=conversation.id, sender="assistant", content=response, language=language))
+        _timeline_event(user_id, "health_chat", conversation.title, response, conversation.id, {"language": language})
         db.session.commit()
     except GeminiServiceError as error:
         db.session.rollback()
@@ -137,6 +152,14 @@ def symptom_check():
         result = generate_symptom_check_response(symptoms, age, duration, language)
         db.session.add(Message(conversation_id=conversation.id, sender="user", content=f"Symptoms: {symptoms}", language=language))
         db.session.add(Message(conversation_id=conversation.id, sender="assistant", content=result["summary"], language=language))
+        _timeline_event(
+            user_id,
+            "symptom_check",
+            "Symptom check",
+            result["summary"],
+            conversation.id,
+            {"urgency": result["urgency"], "symptoms": symptoms, "age": age, "duration": duration, "language": language},
+        )
         db.session.commit()
         return jsonify({"result": result, "conversation": conversation.to_dict()}), 200
     except GeminiServiceError as error:
@@ -178,6 +201,14 @@ def analyze_image():
         user_content = f"Document uploaded: {uploaded_file.filename}" + (f"\nInstruction: {instruction}" if instruction else "")
         db.session.add(Message(conversation_id=conversation.id, sender="user", content=user_content, language=language))
         db.session.add(Message(conversation_id=conversation.id, sender="assistant", content=response, language=language))
+        _timeline_event(
+            user_id,
+            "document_analysis",
+            f"Document analysis: {uploaded_file.filename}",
+            response,
+            conversation.id,
+            {"filename": uploaded_file.filename, "mime_type": mime_type, "instruction": instruction, "language": language},
+        )
         db.session.commit()
     except GeminiServiceError as error:
         db.session.rollback()
