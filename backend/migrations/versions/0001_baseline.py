@@ -26,7 +26,6 @@ def upgrade() -> None:
         sa.Column("role", sa.String(length=20), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("email"),
     )
     op.create_index("ix_users_email", "users", ["email"], unique=True)
 
