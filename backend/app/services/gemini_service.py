@@ -29,11 +29,21 @@ def _language_instruction(language: str) -> str:
     return f"Respond in {languages.get(language, 'English')}."
 
 
-def generate_health_chat_response(message: str, language: str = "en") -> str:
+def generate_health_chat_response(message: str, language: str = "en", history=None) -> str:
     client = _client()
+    history = history or []
+    history_lines = []
+    for item in history:
+        sender = item.get("sender", "unknown")
+        content = str(item.get("content", "")).strip()
+        if content:
+            history_lines.append(f"{sender}: {content}")
+    history_context = "\n".join(history_lines) or "No previous conversation context."
     prompt = ("You are CareBridge AI, a healthcare information assistant. Provide clear, cautious, educational information. "
               "Do not diagnose, prescribe, or claim certainty. Ask the user to seek urgent medical care for emergency warning signs. "
-              f"Keep the response concise. {_language_instruction(language)}\n\nUser question: {message}")
+              f"Keep the response concise. {_language_instruction(language)}\n\n"
+              "Use the conversation history only as context for continuity. Do not assume facts that are not present.\n"
+              f"Conversation history:\n{history_context}\n\nCurrent user question: {message}")
     return _extract_text(client.models.generate_content(model="gemini-2.5-flash", contents=prompt))
 
 
