@@ -120,6 +120,31 @@ def test_chat_success_with_mocked_gemini(client):
     assert data["conversation"]["messages"][1]["sender"] == "assistant"
 
 
+def test_chat_rejects_other_users_conversation(client):
+    first_headers = auth_headers(client)
+    with patch(
+        "app.routes.ai.generate_health_chat_response",
+        return_value="Private conversation response.",
+    ):
+        created = client.post(
+            "/api/ai/chat",
+            headers=first_headers,
+            json={"message": "Private question"},
+        )
+    conversation_id = created.get_json()["conversation"]["id"]
+
+    second_headers = auth_headers(client, "other-chat@example.com")
+    with patch("app.routes.ai.generate_health_chat_response") as mocked_gemini:
+        response = client.post(
+            "/api/ai/chat",
+            headers=second_headers,
+            json={"message": "Should not access this", "conversation_id": conversation_id},
+        )
+
+    assert response.status_code == 404
+    mocked_gemini.assert_not_called()
+
+
 def test_chat_rejects_oversized_message(client):
     headers = auth_headers(client)
     response = client.post(
