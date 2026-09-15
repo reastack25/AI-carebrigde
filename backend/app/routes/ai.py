@@ -174,7 +174,7 @@ def analyze_image():
     if not conversation:
         return jsonify({"message": "conversation not found"}), 404
     try:
-        response = analyze_health_document(file_bytes, mime_type, instruction, language)
+        response = analyze_health_document(file_bytes, mime_type, instruction, language, _chat_history(conversation))
         user_content = f"Document uploaded: {uploaded_file.filename}" + (f"\nInstruction: {instruction}" if instruction else "")
         db.session.add(Message(conversation_id=conversation.id, sender="user", content=user_content, language=language))
         db.session.add(Message(conversation_id=conversation.id, sender="assistant", content=response, language=language))
