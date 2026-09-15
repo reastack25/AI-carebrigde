@@ -14,24 +14,21 @@ def register():
     name = data.get("name", "").strip()
     email = data.get("email", "").strip().lower()
     password = data.get("password", "")
-    role = data.get("role", "patient")
 
     if not name or not email or not password:
         return jsonify({"message": "name, email and password are required"}), 400
-    if role not in {"patient", "doctor", "admin"}:
-        return jsonify({"message": "invalid role"}), 400
     if len(password) < 8:
         return jsonify({"message": "password must be at least 8 characters"}), 400
     if db.session.scalar(select(User).where(User.email == email)):
         return jsonify({"message": "email is already registered"}), 409
 
-    user = User(name=name, email=email, role=role)
+    # Public self-registration creates patient accounts only. Doctor/admin
+    # accounts must be provisioned through a trusted administrative workflow.
+    user = User(name=name, email=email, password_hash="", role="patient")
     user.set_password(password)
     db.session.add(user)
     db.session.flush()
-
-    if role == "patient":
-        db.session.add(Patient(user_id=user.id))
+    db.session.add(Patient(user_id=user.id))
 
     db.session.commit()
     token = create_access_token(identity=str(user.id), additional_claims={"role": user.role})
