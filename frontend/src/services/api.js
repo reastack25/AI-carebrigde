@@ -11,6 +11,17 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem("carebridge_token");
+      localStorage.removeItem("carebridge_user");
+    }
+    return Promise.reject(error);
+  },
+);
+
 export const authApi = {
   register: (payload) => api.post("/auth/register", payload),
   login: (payload) => api.post("/auth/login", payload),
