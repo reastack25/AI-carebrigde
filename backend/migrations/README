@@ -1,0 +1,14 @@
+# Alembic migration environment
+
+This directory is managed by Flask-Migrate. Run migrations from the `backend/` directory with:
+
+```bash
+flask --app run.py db upgrade
+```
+
+To create a new migration after changing SQLAlchemy models:
+
+```bash
+flask --app run.py db migrate -m "describe the schema change"
+flask --app run.py db upgrade
+```
