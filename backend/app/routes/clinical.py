@@ -9,6 +9,7 @@ from ..models import CareConsent, ClinicalReview, HealthTimelineEvent, MedicalRe
 
 clinical_bp = Blueprint("clinical", __name__, url_prefix="/api/clinical")
 MAX_NOTE_LENGTH = 5000
+VALID_RECORD_TYPES = {"medication", "medical_report", "symptom_check", "timeline"}
 
 
 def current_user():
@@ -21,28 +22,18 @@ def require_role(*roles):
 
 
 def _doctor_dict(doctor):
-    return {
-        "id": doctor.id,
-        "name": doctor.name,
-        "email": doctor.email,
-        "specialty": doctor.specialty or "",
-        "facility": doctor.facility or "",
-    }
+    return {"id": doctor.id, "name": doctor.name, "email": doctor.email, "specialty": doctor.specialty or "", "facility": doctor.facility or ""}
 
 
 def _patient_dict(patient):
     profile = patient.patient_profile
-    return {
-        "id": patient.id,
-        "name": patient.name,
-        "email": patient.email,
-        "profile": {
-            "date_of_birth": profile.date_of_birth.isoformat() if profile and profile.date_of_birth else None,
-            "gender": profile.gender if profile else "",
-            "blood_group": profile.blood_group if profile else "",
-            "emergency_contact": profile.emergency_contact if profile else "",
-        },
-    }
+    return {"id": patient.id, "name": patient.name, "email": patient.email, "profile": {"date_of_birth": profile.date_of_birth.isoformat() if profile and profile.date_of_birth else None, "gender": profile.gender if profile else "", "blood_group": profile.blood_group if profile else "", "emergency_contact": profile.emergency_contact if profile else ""}}
+
+
+def _record_exists(patient_id, record_type, record_id):
+    model_map = {"medication": Medication, "medical_report": MedicalReport, "symptom_check": SymptomCheck, "timeline": HealthTimelineEvent}
+    model = model_map[record_type]
+    return db.session.scalar(select(model).where(model.id == record_id, model.user_id == patient_id)) if record_type != "timeline" else db.session.scalar(select(model).where(model.id == record_id, model.user_id == patient_id))
 
 
 @clinical_bp.get("/doctors")
@@ -56,14 +47,10 @@ def list_doctors():
 @jwt_required()
 def list_consents():
     user = current_user()
-    if not user:
-        return jsonify({"message": "user not found"}), 404
-    if user.role == "patient":
-        consents = db.session.scalars(select(CareConsent).where(CareConsent.patient_id == user.id).order_by(CareConsent.granted_at.desc())).all()
-    elif user.role == "doctor":
-        consents = db.session.scalars(select(CareConsent).where(CareConsent.doctor_id == user.id, CareConsent.revoked_at.is_(None)).order_by(CareConsent.granted_at.desc())).all()
-    else:
-        return jsonify({"message": "forbidden"}), 403
+    if not user: return jsonify({"message": "user not found"}), 404
+    if user.role == "patient": consents = db.session.scalars(select(CareConsent).where(CareConsent.patient_id == user.id).order_by(CareConsent.granted_at.desc())).all()
+    elif user.role == "doctor": consents = db.session.scalars(select(CareConsent).where(CareConsent.doctor_id == user.id, CareConsent.revoked_at.is_(None)).order_by(CareConsent.granted_at.desc())).all()
+    else: return jsonify({"message": "forbidden"}), 403
     return jsonify({"consents": [item.to_dict() for item in consents]}), 200
 
 
@@ -71,21 +58,16 @@ def list_consents():
 @jwt_required()
 def grant_consent():
     user = current_user()
-    if not user or user.role != "patient":
-        return jsonify({"message": "only patients can grant consent"}), 403
+    if not user or user.role != "patient": return jsonify({"message": "only patients can grant consent"}), 403
     data = request.get_json(silent=True) or {}
     doctor_id = data.get("doctor_id")
-    if isinstance(doctor_id, bool) or not str(doctor_id).isdigit() or int(doctor_id) <= 0:
-        return jsonify({"message": "doctor_id must be a positive integer"}), 400
+    if isinstance(doctor_id, bool) or not str(doctor_id).isdigit() or int(doctor_id) <= 0: return jsonify({"message": "doctor_id must be a positive integer"}), 400
     doctor = db.session.get(User, int(doctor_id))
-    if not doctor or doctor.role != "doctor":
-        return jsonify({"message": "doctor not found"}), 404
+    if not doctor or doctor.role != "doctor": return jsonify({"message": "doctor not found"}), 404
     existing = db.session.scalar(select(CareConsent).where(CareConsent.patient_id == user.id, CareConsent.doctor_id == doctor.id, CareConsent.revoked_at.is_(None)))
-    if existing:
-        return jsonify({"consent": existing.to_dict()}), 200
+    if existing: return jsonify({"consent": existing.to_dict()}), 200
     consent = CareConsent(patient_id=user.id, doctor_id=doctor.id)
-    db.session.add(consent)
-    db.session.flush()
+    db.session.add(consent); db.session.flush()
     db.session.add(HealthTimelineEvent(user_id=user.id, event_type="consent_granted", title="Clinical access granted", summary=f"You granted {doctor.name} access to your CareBridge health records.", event_metadata={"doctor_id": doctor.id, "consent_id": consent.id}))
     db.session.commit()
     return jsonify({"consent": consent.to_dict()}), 201
@@ -95,11 +77,9 @@ def grant_consent():
 @jwt_required()
 def revoke_consent(doctor_id):
     user = current_user()
-    if not user or user.role != "patient":
-        return jsonify({"message": "only patients can revoke consent"}), 403
+    if not user or user.role != "patient": return jsonify({"message": "only patients can revoke consent"}), 403
     consent = db.session.scalar(select(CareConsent).where(CareConsent.patient_id == user.id, CareConsent.doctor_id == doctor_id, CareConsent.revoked_at.is_(None)))
-    if not consent:
-        return jsonify({"message": "active consent not found"}), 404
+    if not consent: return jsonify({"message": "active consent not found"}), 404
     consent.revoked_at = datetime.now(timezone.utc)
     doctor = db.session.get(User, doctor_id)
     db.session.add(HealthTimelineEvent(user_id=user.id, event_type="consent_revoked", title="Clinical access revoked", summary=f"You revoked {doctor.name if doctor else 'the doctor'}'s access to your CareBridge health records.", event_metadata={"doctor_id": doctor_id, "consent_id": consent.id}))
@@ -111,8 +91,7 @@ def revoke_consent(doctor_id):
 @jwt_required()
 def doctor_patients():
     user = current_user()
-    if not user or not require_role("doctor"):
-        return jsonify({"message": "doctor access required"}), 403
+    if not user or not require_role("doctor"): return jsonify({"message": "doctor access required"}), 403
     patients = db.session.scalars(select(User).join(CareConsent, CareConsent.patient_id == User.id).where(CareConsent.doctor_id == user.id, CareConsent.revoked_at.is_(None), User.role == "patient").distinct().order_by(User.name.asc())).all()
     return jsonify({"patients": [{"id": patient.id, "name": patient.name, "email": patient.email} for patient in patients]}), 200
 
@@ -129,14 +108,11 @@ def _patient_records(patient_id):
 @jwt_required()
 def patient_records(patient_id):
     user = current_user()
-    if not user or not require_role("doctor"):
-        return jsonify({"message": "doctor access required"}), 403
+    if not user or not require_role("doctor"): return jsonify({"message": "doctor access required"}), 403
     patient = db.session.get(User, patient_id)
-    if not patient or patient.role != "patient":
-        return jsonify({"message": "patient not found"}), 404
+    if not patient or patient.role != "patient": return jsonify({"message": "patient not found"}), 404
     consent = db.session.scalar(select(CareConsent).where(CareConsent.patient_id == patient_id, CareConsent.doctor_id == user.id, CareConsent.revoked_at.is_(None)))
-    if not consent:
-        return jsonify({"message": "active patient consent is required"}), 403
+    if not consent: return jsonify({"message": "active patient consent is required"}), 403
     return jsonify({"patient": _patient_dict(patient), "records": _patient_records(patient_id)}), 200
 
 
@@ -144,27 +120,26 @@ def patient_records(patient_id):
 @jwt_required()
 def create_review(patient_id):
     user = current_user()
-    if not user or not require_role("doctor"):
-        return jsonify({"message": "doctor access required"}), 403
+    if not user or not require_role("doctor"): return jsonify({"message": "doctor access required"}), 403
     patient = db.session.get(User, patient_id)
-    if not patient or patient.role != "patient":
-        return jsonify({"message": "patient not found"}), 404
+    if not patient or patient.role != "patient": return jsonify({"message": "patient not found"}), 404
     consent = db.session.scalar(select(CareConsent).where(CareConsent.patient_id == patient_id, CareConsent.doctor_id == user.id, CareConsent.revoked_at.is_(None)))
-    if not consent:
-        return jsonify({"message": "active patient consent is required"}), 403
+    if not consent: return jsonify({"message": "active patient consent is required"}), 403
     data = request.get_json(silent=True) or {}
     note = str(data.get("note", "")).strip()
     status = str(data.get("status", "reviewed")).strip().lower()
-    if not note:
-        return jsonify({"message": "note is required"}), 400
-    if len(note) > MAX_NOTE_LENGTH:
-        return jsonify({"message": "note must not exceed 5000 characters"}), 400
-    if status not in {"reviewed", "follow_up", "urgent_review"}:
-        return jsonify({"message": "invalid review status"}), 400
-    review = ClinicalReview(patient_id=patient_id, doctor_id=user.id, status=status, note=note)
-    db.session.add(review)
-    db.session.flush()
-    db.session.add(HealthTimelineEvent(user_id=patient_id, event_type="clinical_review", title="Clinical review completed", summary="A doctor added a clinical review to your CareBridge record.", event_metadata={"review_id": review.id, "doctor_id": user.id, "status": status}))
+    record_type = str(data.get("record_type", "")).strip().lower()
+    record_id = data.get("record_id")
+    if not note: return jsonify({"message": "note is required"}), 400
+    if len(note) > MAX_NOTE_LENGTH: return jsonify({"message": "note must not exceed 5000 characters"}), 400
+    if status not in {"reviewed", "follow_up", "urgent_review"}: return jsonify({"message": "invalid review status"}), 400
+    if record_type or record_id is not None:
+        if record_type not in VALID_RECORD_TYPES: return jsonify({"message": "invalid record_type"}), 400
+        if isinstance(record_id, bool) or not isinstance(record_id, int) or record_id <= 0: return jsonify({"message": "record_id must be a positive integer"}), 400
+        if not _record_exists(patient_id, record_type, record_id): return jsonify({"message": "record not found for this patient"}), 404
+    review = ClinicalReview(patient_id=patient_id, doctor_id=user.id, record_type=record_type or None, record_id=record_id, status=status, note=note)
+    db.session.add(review); db.session.flush()
+    db.session.add(HealthTimelineEvent(user_id=patient_id, event_type="clinical_review", title="Clinical review completed", summary="A doctor added a clinical review to your CareBridge record.", event_metadata={"review_id": review.id, "doctor_id": user.id, "status": status, "record_type": record_type or None, "record_id": record_id}))
     db.session.commit()
     return jsonify({"review": review.to_dict()}), 201
 
@@ -173,12 +148,8 @@ def create_review(patient_id):
 @jwt_required()
 def reviews():
     user = current_user()
-    if not user:
-        return jsonify({"message": "user not found"}), 404
-    if user.role == "patient":
-        items = db.session.scalars(select(ClinicalReview).where(ClinicalReview.patient_id == user.id).order_by(ClinicalReview.created_at.desc()).limit(50)).all()
-    elif user.role == "doctor":
-        items = db.session.scalars(select(ClinicalReview).where(ClinicalReview.doctor_id == user.id).order_by(ClinicalReview.created_at.desc()).limit(50)).all()
-    else:
-        return jsonify({"message": "forbidden"}), 403
+    if not user: return jsonify({"message": "user not found"}), 404
+    if user.role == "patient": items = db.session.scalars(select(ClinicalReview).where(ClinicalReview.patient_id == user.id).order_by(ClinicalReview.created_at.desc()).limit(50)).all()
+    elif user.role == "doctor": items = db.session.scalars(select(ClinicalReview).where(ClinicalReview.doctor_id == user.id).order_by(ClinicalReview.created_at.desc()).limit(50)).all()
+    else: return jsonify({"message": "forbidden"}), 403
     return jsonify({"reviews": [item.to_dict() for item in items]}), 200
