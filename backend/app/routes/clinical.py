@@ -5,7 +5,7 @@ from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from sqlalchemy import select
 
 from ..extensions import db
-from ..models import CareConsent, ClinicalReview, HealthTimelineEvent, MedicalReport, Medication, SymptomCheck, User
+from ..models import CareConsent, ClinicalReview, HealthTimelineEvent, MedicalReport, Medication, Patient, SymptomCheck, User
 
 clinical_bp = Blueprint("clinical", __name__, url_prefix="/api/clinical")
 MAX_NOTE_LENGTH = 5000
@@ -20,11 +20,36 @@ def require_role(*roles):
     return claims.get("role") in roles
 
 
+def _doctor_dict(doctor):
+    return {
+        "id": doctor.id,
+        "name": doctor.name,
+        "email": doctor.email,
+        "specialty": doctor.specialty or "",
+        "facility": doctor.facility or "",
+    }
+
+
+def _patient_dict(patient):
+    profile = patient.patient_profile
+    return {
+        "id": patient.id,
+        "name": patient.name,
+        "email": patient.email,
+        "profile": {
+            "date_of_birth": profile.date_of_birth.isoformat() if profile and profile.date_of_birth else None,
+            "gender": profile.gender if profile else "",
+            "blood_group": profile.blood_group if profile else "",
+            "emergency_contact": profile.emergency_contact if profile else "",
+        },
+    }
+
+
 @clinical_bp.get("/doctors")
 @jwt_required()
 def list_doctors():
     doctors = db.session.scalars(select(User).where(User.role == "doctor").order_by(User.name.asc())).all()
-    return jsonify({"doctors": [{"id": doctor.id, "name": doctor.name, "email": doctor.email} for doctor in doctors]}), 200
+    return jsonify({"doctors": [_doctor_dict(doctor) for doctor in doctors]}), 200
 
 
 @clinical_bp.get("/consents")
@@ -112,7 +137,7 @@ def patient_records(patient_id):
     consent = db.session.scalar(select(CareConsent).where(CareConsent.patient_id == patient_id, CareConsent.doctor_id == user.id, CareConsent.revoked_at.is_(None)))
     if not consent:
         return jsonify({"message": "active patient consent is required"}), 403
-    return jsonify({"patient": {"id": patient.id, "name": patient.name, "email": patient.email}, "records": _patient_records(patient_id)}), 200
+    return jsonify({"patient": _patient_dict(patient), "records": _patient_records(patient_id)}), 200
 
 
 @clinical_bp.post("/patients/<int:patient_id>/reviews")
