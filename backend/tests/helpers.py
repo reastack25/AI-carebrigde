@@ -1,7 +1,7 @@
-def register_and_login(client, email="patient@example.com", password="Password123"):
+def register_and_login(client, email="patient@example.com", password="Password123", role="patient"):
     register_response = client.post(
         "/api/auth/register",
-        json={"name": "Test Patient", "email": email, "password": password},
+        json={"name": "Test User", "email": email, "password": password, "role": role},
     )
     assert register_response.status_code == 201
     login_response = client.post(
