@@ -56,3 +56,26 @@ class Message(db.Model):
 
     def to_dict(self):
         return {"id": self.id, "sender": self.sender, "content": self.content, "language": self.language, "created_at": self.created_at.isoformat()}
+
+
+class HealthTimelineEvent(db.Model):
+    __tablename__ = "health_timeline_events"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey("conversations.id"), nullable=True, index=True)
+    event_type = db.Column(db.String(40), nullable=False, index=True)
+    title = db.Column(db.String(200), nullable=False)
+    summary = db.Column(db.Text, nullable=False)
+    metadata = db.Column(db.JSON, nullable=False, default=dict)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "event_type": self.event_type,
+            "title": self.title,
+            "summary": self.summary,
+            "metadata": self.metadata or {},
+            "conversation_id": self.conversation_id,
+            "created_at": self.created_at.isoformat(),
+        }
