@@ -11,12 +11,43 @@ CareBridge AI is a healthcare information and decision-support application desig
 - Conversation memory with recent context
 - Symptom checker with cautious urgency guidance and red flags
 - Multimodal medicine/report/prescription analysis for supported images and PDFs
+- Structured medication extraction from uploaded prescriptions and medicine documents
 - Multilingual responses: English, Kiswahili, Dholuo, Kikuyu, and Kalenjin
-- Structured patient health timeline for chat, symptom checks, and document analyses
+- Structured patient health timeline for chat, symptom checks, document analyses, and medication extraction
 - User-isolated conversations and timeline records
 - React + Vite + Tailwind patient dashboard
 - Flask + PostgreSQL-ready backend with automated tests
 - Versioned PostgreSQL schema migrations with Flask-Migrate/Alembic
+
+## Medication extraction API
+
+All medication endpoints require a valid JWT bearer token.
+
+### List saved medications
+
+```http
+GET /api/ai/medications
+Authorization: Bearer <access-token>
+```
+
+Returns the authenticated user's medication records, newest first, limited to 50 records.
+
+### Extract medications from an upload
+
+```http
+POST /api/ai/extract-medications
+Authorization: Bearer <access-token>
+Content-Type: multipart/form-data
+```
+
+Multipart fields:
+
+- `image` — required image or PDF upload; supported types include JPEG, PNG, WEBP, HEIC, HEIF, and PDF
+- `instruction` — optional extraction guidance, maximum 1,000 characters
+- `language` — optional supported language code: `en`, `sw`, `luo`, `kik`, or `kal`
+- `conversation_id` — optional conversation to associate with the extraction
+
+The endpoint returns the extracted medication details, persisted records, and the related conversation. The system does not intentionally guess text that is unreadable or absent from the uploaded document.
 
 ## Health timeline
 
@@ -26,7 +57,15 @@ Raw uploaded document bytes are not stored in the timeline. The current implemen
 
 ## Database migrations
 
-The backend uses Flask-Migrate/Alembic for production schema management. The initial migration is `backend/migrations/versions/0001_baseline.py`.
+The backend uses Flask-Migrate/Alembic for production schema management. The migration chain is:
+
+```text
+0001_baseline
+    ↓
+0002_structured_medical_records
+    ↓
+0003_medications
+```
 
 From the `backend/` directory:
 
@@ -62,7 +101,9 @@ carebridge-ai/
 │   │   └── routes/
 │   ├── migrations/
 │   │   ├── versions/
-│   │   │   └── 0001_baseline.py
+│   │   │   ├── 0001_baseline.py
+│   │   │   ├── 0002_structured_medical_records.py
+│   │   │   └── 0003_medications.py
 │   │   ├── env.py
 │   │   ├── alembic.ini
 │   │   └── script.py.mako
