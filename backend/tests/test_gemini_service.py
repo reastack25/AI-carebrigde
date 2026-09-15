@@ -5,6 +5,7 @@ import pytest
 
 from app.services.gemini_service import (
     GeminiServiceError,
+    analyze_health_document,
     generate_health_chat_response,
     generate_symptom_check_response,
 )
@@ -13,8 +14,10 @@ from app.services.gemini_service import (
 class FakeModels:
     def __init__(self, response):
         self.response = response
+        self.last_kwargs = None
 
     def generate_content(self, **kwargs):
+        self.last_kwargs = kwargs
         return self.response
 
 
@@ -81,3 +84,29 @@ def test_symptom_check_rejects_invalid_gemini_output(response_text, error_messag
     with patch("app.services.gemini_service._client", return_value=client):
         with pytest.raises(GeminiServiceError, match=error_message):
             generate_symptom_check_response("headache")
+
+
+def test_health_document_sends_bytes_and_mime_type():
+    client = FakeClient(fake_response("The document shows a normal-looking result."))
+    fake_part = object()
+    with patch("app.services.gemini_service._client", return_value=client), patch(
+        "app.services.gemini_service.types.Part.from_bytes", return_value=fake_part
+    ) as from_bytes:
+        result = analyze_health_document(
+            b"fake-pdf-bytes", "application/pdf", "Explain the key findings", "sw"
+        )
+
+    assert result == "The document shows a normal-looking result."
+    from_bytes.assert_called_once_with(data=b"fake-pdf-bytes", mime_type="application/pdf")
+    assert client.models.last_kwargs["model"] == "gemini-2.5-flash"
+    assert client.models.last_kwargs["contents"][1] is fake_part
+    assert "Kiswahili" in client.models.last_kwargs["contents"][0]
+
+
+def test_health_document_rejects_empty_gemini_response():
+    client = FakeClient(fake_response(""))
+    with patch("app.services.gemini_service._client", return_value=client), patch(
+        "app.services.gemini_service.types.Part.from_bytes", return_value=object()
+    ):
+        with pytest.raises(GeminiServiceError, match="empty response"):
+            analyze_health_document(b"image", "image/jpeg", "Describe this image")
