@@ -84,11 +84,11 @@ def health_chat():
         return jsonify({"message": str(error)}), 400
     language = data.get("language", "en") if data.get("language", "en") in SUPPORTED_LANGUAGES else "en"
     user_id = int(get_jwt_identity())
+    conversation = _conversation(user_id, conversation_id, message[:60])
+    if not conversation:
+        return jsonify({"message": "conversation not found"}), 404
     try:
         response = generate_health_chat_response(message, language)
-        conversation = _conversation(user_id, conversation_id, message[:60])
-        if not conversation:
-            return jsonify({"message": "conversation not found"}), 404
         db.session.add(Message(conversation_id=conversation.id, sender="user", content=message, language=language))
         db.session.add(Message(conversation_id=conversation.id, sender="assistant", content=response, language=language))
         db.session.commit()
@@ -122,11 +122,11 @@ def symptom_check():
         return jsonify({"message": str(error)}), 400
     language = data.get("language", "en") if data.get("language", "en") in SUPPORTED_LANGUAGES else "en"
     user_id = int(get_jwt_identity())
+    conversation = _conversation(user_id, conversation_id, "Symptom check")
+    if not conversation:
+        return jsonify({"message": "conversation not found"}), 404
     try:
         result = generate_symptom_check_response(symptoms, age, duration, language)
-        conversation = _conversation(user_id, conversation_id, "Symptom check")
-        if not conversation:
-            return jsonify({"message": "conversation not found"}), 404
         db.session.add(Message(conversation_id=conversation.id, sender="user", content=f"Symptoms: {symptoms}", language=language))
         db.session.add(Message(conversation_id=conversation.id, sender="assistant", content=result["summary"], language=language))
         db.session.commit()
@@ -162,11 +162,11 @@ def analyze_image():
     if len(file_bytes) > MAX_DOCUMENT_SIZE:
         return jsonify({"message": "document must not exceed 10 MB"}), 413
     user_id = int(get_jwt_identity())
+    conversation = _conversation(user_id, conversation_id, f"Document analysis: {uploaded_file.filename}")
+    if not conversation:
+        return jsonify({"message": "conversation not found"}), 404
     try:
         response = analyze_health_document(file_bytes, mime_type, instruction, language)
-        conversation = _conversation(user_id, conversation_id, f"Document analysis: {uploaded_file.filename}")
-        if not conversation:
-            return jsonify({"message": "conversation not found"}), 404
         user_content = f"Document uploaded: {uploaded_file.filename}" + (f"\nInstruction: {instruction}" if instruction else "")
         db.session.add(Message(conversation_id=conversation.id, sender="user", content=user_content, language=language))
         db.session.add(Message(conversation_id=conversation.id, sender="assistant", content=response, language=language))
