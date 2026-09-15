@@ -88,5 +88,33 @@ def analyze_health_document(file_bytes: bytes, mime_type: str, instruction: str,
     return _extract_text(client.models.generate_content(model="gemini-2.5-flash", contents=[prompt, document_part]))
 
 
+def extract_medications_from_document(file_bytes: bytes, mime_type: str, instruction: str = "", language: str = "en") -> list[dict]:
+    """Extract only clearly readable medication details from a document or image."""
+    client = _client()
+    prompt = f'''You are CareBridge AI extracting medication information from a healthcare document.
+Return ONLY valid JSON with exactly one key: medications.
+medications must be an array. Each item must contain exactly these string keys: name, dosage, frequency, duration, instructions, warnings.
+Use an empty string when a value is absent or unreadable. Do not guess, infer, or invent medication names or directions. Preserve uncertainty by leaving the field empty. If no medication is clearly identified, return an empty array.
+This is extraction, not diagnosis or prescribing. {_language_instruction(language)}
+User instruction: {instruction or 'Extract clearly readable medicines and their written directions.'}'''
+    document_part = types.Part.from_bytes(data=file_bytes, mime_type=mime_type)
+    raw = _extract_text(client.models.generate_content(model="gemini-2.5-flash", contents=[prompt, document_part]))
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.IGNORECASE).strip()
+    try:
+        result = json.loads(cleaned)
+    except json.JSONDecodeError as error:
+        raise GeminiServiceError("Gemini returned invalid medication extraction JSON") from error
+    if set(result) != {"medications"} or not isinstance(result["medications"], list):
+        raise GeminiServiceError("Gemini returned an invalid medication extraction response")
+    fields = {"name", "dosage", "frequency", "duration", "instructions", "warnings"}
+    normalized = []
+    for item in result["medications"]:
+        if not isinstance(item, dict) or set(item) != fields or not all(isinstance(item[key], str) for key in fields):
+            raise GeminiServiceError("Gemini returned invalid medication details")
+        if item["name"].strip():
+            normalized.append({key: item[key].strip() for key in fields})
+    return normalized
+
+
 def analyze_health_image(image_bytes: bytes, mime_type: str, instruction: str, language: str = "en", history=None) -> str:
     return analyze_health_document(image_bytes, mime_type, instruction, language, history)
