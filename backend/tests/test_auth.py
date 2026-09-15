@@ -22,6 +22,22 @@ def test_register_patient(client):
     assert data["user"]["role"] == "patient"
 
 
+def test_public_registration_cannot_create_doctor_or_admin(client):
+    for role in ("doctor", "admin"):
+        response = client.post(
+            "/api/auth/register",
+            json={
+                "name": f"Attempted {role}",
+                "email": f"{role}@example.com",
+                "password": "Password123",
+                "role": role,
+            },
+        )
+        assert response.status_code == 201
+        data = response.get_json()
+        assert data["user"]["role"] == "patient"
+
+
 def test_duplicate_email_is_rejected(client):
     register_and_login(client)
     response = client.post(
