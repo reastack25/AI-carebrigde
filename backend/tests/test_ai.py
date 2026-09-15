@@ -120,6 +120,66 @@ def test_chat_success_with_mocked_gemini(client):
     assert data["conversation"]["messages"][1]["sender"] == "assistant"
 
 
+def test_chat_passes_recent_history_to_gemini(client):
+    headers = auth_headers(client)
+    calls = []
+
+    def fake_chat(message, language, history):
+        calls.append((message, language, history))
+        return "Context-aware response."
+
+    with patch("app.routes.ai.generate_health_chat_response", side_effect=fake_chat):
+        first = client.post(
+            "/api/ai/chat",
+            headers=headers,
+            json={"message": "I have a headache", "language": "sw"},
+        )
+        conversation_id = first.get_json()["conversation"]["id"]
+        second = client.post(
+            "/api/ai/chat",
+            headers=headers,
+            json={"message": "What should I do next?", "conversation_id": conversation_id, "language": "sw"},
+        )
+
+    assert second.status_code == 200
+    assert len(calls) == 2
+    assert calls[0][2] == []
+    assert calls[1][0] == "What should I do next?"
+    assert calls[1][1] == "sw"
+    assert calls[1][2] == [
+        {"sender": "user", "content": "I have a headache"},
+        {"sender": "assistant", "content": "Context-aware response."},
+    ]
+
+
+def test_chat_limits_history_to_recent_messages(client):
+    headers = auth_headers(client)
+    calls = []
+
+    def fake_chat(message, language, history):
+        calls.append(history)
+        return "response"
+
+    with patch("app.routes.ai.generate_health_chat_response", side_effect=fake_chat):
+        first = client.post(
+            "/api/ai/chat",
+            headers=headers,
+            json={"message": "message 0"},
+        )
+        conversation_id = first.get_json()["conversation"]["id"]
+        for index in range(1, 8):
+            response = client.post(
+                "/api/ai/chat",
+                headers=headers,
+                json={"message": f"message {index}", "conversation_id": conversation_id},
+            )
+            assert response.status_code == 200
+
+    assert len(calls[-1]) == 12
+    assert calls[-1][0]["content"] == "message 1"
+    assert calls[-1][-1]["content"] == "response"
+
+
 def test_chat_rejects_other_users_conversation(client):
     first_headers = auth_headers(client)
     with patch(
