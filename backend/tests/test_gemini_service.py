@@ -44,6 +44,22 @@ def test_health_chat_returns_trimmed_response():
     assert result == "Stay hydrated and maintain a regular sleep schedule."
 
 
+def test_health_chat_includes_history_in_prompt():
+    client = FakeClient(fake_response("Follow-up response."))
+    history = [
+        {"sender": "user", "content": "I have a headache"},
+        {"sender": "assistant", "content": "Monitor it and seek care if it worsens."},
+    ]
+    with patch("app.services.gemini_service._client", return_value=client):
+        result = generate_health_chat_response("What should I watch for?", "sw", history)
+
+    assert result == "Follow-up response."
+    prompt = client.models.last_kwargs["contents"]
+    assert "I have a headache" in prompt
+    assert "Monitor it and seek care if it worsens." in prompt
+    assert "Kiswahili" in prompt
+
+
 def valid_symptom_result():
     return (
         '{"urgency":"soon","summary":"Monitor the symptoms and consider clinical advice.",'
@@ -86,14 +102,15 @@ def test_symptom_check_rejects_invalid_gemini_output(response_text, error_messag
             generate_symptom_check_response("headache")
 
 
-def test_health_document_sends_bytes_and_mime_type():
+def test_health_document_sends_bytes_mime_and_history():
     client = FakeClient(fake_response("The document shows a normal-looking result."))
     fake_part = object()
+    history = [{"sender": "user", "content": "I am worried about this result."}]
     with patch("app.services.gemini_service._client", return_value=client), patch(
         "app.services.gemini_service.types.Part.from_bytes", return_value=fake_part
     ) as from_bytes:
         result = analyze_health_document(
-            b"fake-pdf-bytes", "application/pdf", "Explain the key findings", "sw"
+            b"fake-pdf-bytes", "application/pdf", "Explain the key findings", "sw", history
         )
 
     assert result == "The document shows a normal-looking result."
@@ -101,6 +118,7 @@ def test_health_document_sends_bytes_and_mime_type():
     assert client.models.last_kwargs["model"] == "gemini-2.5-flash"
     assert client.models.last_kwargs["contents"][1] is fake_part
     assert "Kiswahili" in client.models.last_kwargs["contents"][0]
+    assert "I am worried about this result." in client.models.last_kwargs["contents"][0]
 
 
 def test_health_document_rejects_empty_gemini_response():
