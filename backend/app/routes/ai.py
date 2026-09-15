@@ -57,7 +57,7 @@ def _timeline_event(user_id, event_type, title, summary, conversation_id=None, m
             event_type=event_type,
             title=title[:200],
             summary=summary.strip()[:10000],
-            metadata=metadata or {},
+            event_metadata=metadata or {},
         )
     )
 
