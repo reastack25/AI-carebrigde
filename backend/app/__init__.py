@@ -6,6 +6,7 @@ from .extensions import db, jwt, migrate
 from .routes.ai import ai_bp
 from .routes.auth import auth_bp
 from .routes.health import health_bp
+from .routes.medications import medications_bp
 
 
 def create_app(config_class=Config):
@@ -20,5 +21,6 @@ def create_app(config_class=Config):
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(ai_bp)
+    app.register_blueprint(medications_bp)
 
     return app
