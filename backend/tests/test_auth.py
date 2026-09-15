@@ -7,6 +7,12 @@ def test_health_endpoint(client):
     assert response.get_json() == {"status": "ok", "service": "carebridge-api"}
 
 
+def test_health_readiness_endpoint(client):
+    response = client.get("/api/health/ready")
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "ready", "service": "carebridge-api", "database": "ok"}
+
+
 def test_register_patient(client):
     response = client.post(
         "/api/auth/register",
