@@ -56,11 +56,15 @@ def test_symptom_check_success_with_mocked_gemini(client):
     with patch("app.routes.ai.generate_symptom_check_response", return_value=result):
         response = client.post("/api/ai/symptom-check", headers=headers, json={"symptoms": "mild headache", "age": "25", "duration": "1 day"})
     assert response.status_code == 200
-    assert response.get_json()["result"] == result
+    data = response.get_json()
+    assert data["result"] == result
+    assert data["record"]["symptoms"] == "mild headache"
+    assert data["record"]["age"] == 25
+    assert data["record"]["urgency"] == "soon"
 
 
 def test_symptom_check_creates_timeline_event(client, app):
-    from app.models import HealthTimelineEvent
+    from app.models import HealthTimelineEvent, SymptomCheck
     headers = auth_headers(client)
     result = {"urgency": "soon", "summary": "Timeline summary.", "possible_explanations": [], "next_steps": [], "red_flags": [], "disclaimer": "Not a diagnosis."}
     with patch("app.routes.ai.generate_symptom_check_response", return_value=result):
@@ -68,10 +72,13 @@ def test_symptom_check_creates_timeline_event(client, app):
     assert response.status_code == 200
     with app.app_context():
         event = HealthTimelineEvent.query.one()
+        record = SymptomCheck.query.one()
         assert event.event_type == "symptom_check"
         assert event.summary == result["summary"]
         assert event.event_metadata["urgency"] == "soon"
         assert event.event_metadata["language"] == "sw"
+        assert event.event_metadata["record_id"] == record.id
+        assert record.language == "sw"
 
 
 def test_chat_success_with_mocked_gemini(client):
@@ -155,17 +162,20 @@ def test_document_analysis_passes_conversation_history(client):
 
 
 def test_document_analysis_creates_timeline_event(client, app):
-    from app.models import HealthTimelineEvent
+    from app.models import HealthTimelineEvent, MedicalReport
     headers = auth_headers(client)
     with patch("app.routes.ai.analyze_health_document", return_value="Report summary saved."):
         response = client.post("/api/ai/analyze-image", headers=headers, data={"language": "en", "instruction": "Summarize", "image": (BytesIO(b"fake-document"), "report.png")}, content_type="multipart/form-data")
     assert response.status_code == 200
     with app.app_context():
         event = HealthTimelineEvent.query.one()
+        record = MedicalReport.query.one()
         assert event.event_type == "document_analysis"
         assert event.summary == "Report summary saved."
         assert event.event_metadata["filename"] == "report.png"
         assert event.event_metadata["mime_type"] == "image/png"
+        assert event.event_metadata["record_id"] == record.id
+        assert record.summary == "Report summary saved."
 
 
 def test_timeline_is_user_isolated_and_filterable(client):
@@ -185,6 +195,20 @@ def test_timeline_is_user_isolated_and_filterable(client):
     filtered = client.get("/api/ai/timeline?type=symptom_check", headers=first_headers)
     assert filtered.status_code == 200
     assert filtered.get_json()["timeline"] == []
+
+
+def test_structured_record_endpoints_are_user_isolated(client):
+    first_headers = auth_headers(client)
+    result = {"urgency": "routine", "summary": "Private symptom record", "possible_explanations": [], "next_steps": [], "red_flags": [], "disclaimer": "Not a diagnosis."}
+    with patch("app.routes.ai.generate_symptom_check_response", return_value=result):
+        client.post("/api/ai/symptom-check", headers=first_headers, json={"symptoms": "private symptom"})
+    second_headers = auth_headers(client, "other-record@example.com")
+    symptom_response = client.get("/api/ai/symptom-checks", headers=second_headers)
+    report_response = client.get("/api/ai/medical-reports", headers=second_headers)
+    assert symptom_response.status_code == 200
+    assert report_response.status_code == 200
+    assert symptom_response.get_json()["symptom_checks"] == []
+    assert report_response.get_json()["medical_reports"] == []
 
 
 def test_chat_rejects_other_users_conversation(client):
