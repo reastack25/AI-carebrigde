@@ -29,21 +29,24 @@ def _language_instruction(language: str) -> str:
     return f"Respond in {languages.get(language, 'English')}."
 
 
-def generate_health_chat_response(message: str, language: str = "en", history=None) -> str:
-    client = _client()
+def _history_context(history) -> str:
     history = history or []
-    history_lines = []
+    lines = []
     for item in history:
         sender = item.get("sender", "unknown")
         content = str(item.get("content", "")).strip()
         if content:
-            history_lines.append(f"{sender}: {content}")
-    history_context = "\n".join(history_lines) or "No previous conversation context."
+            lines.append(f"{sender}: {content}")
+    return "\n".join(lines) or "No previous conversation context."
+
+
+def generate_health_chat_response(message: str, language: str = "en", history=None) -> str:
+    client = _client()
     prompt = ("You are CareBridge AI, a healthcare information assistant. Provide clear, cautious, educational information. "
               "Do not diagnose, prescribe, or claim certainty. Ask the user to seek urgent medical care for emergency warning signs. "
               f"Keep the response concise. {_language_instruction(language)}\n\n"
               "Use the conversation history only as context for continuity. Do not assume facts that are not present.\n"
-              f"Conversation history:\n{history_context}\n\nCurrent user question: {message}")
+              f"Conversation history:\n{_history_context(history)}\n\nCurrent user question: {message}")
     return _extract_text(client.models.generate_content(model="gemini-2.5-flash", contents=prompt))
 
 
@@ -73,14 +76,17 @@ Duration: {duration or 'not provided'}'''
     return result
 
 
-def analyze_health_document(file_bytes: bytes, mime_type: str, instruction: str, language: str = "en") -> str:
+def analyze_health_document(file_bytes: bytes, mime_type: str, instruction: str, language: str = "en", history=None) -> str:
     client = _client()
     prompt = ("You are CareBridge AI reviewing a user-provided healthcare document or image. Explain only information that can reasonably be observed. "
               "Do not diagnose, prescribe, invent unreadable text, or present uncertain interpretations as facts. If unclear, say so. "
-              f"Recommend a qualified healthcare professional for clinical decisions. {_language_instruction(language)}\n\nUser instruction: {instruction or 'Explain this healthcare document in plain language.'}")
+              f"Recommend a qualified healthcare professional for clinical decisions. {_language_instruction(language)}\n\n"
+              "Use prior conversation context only to understand the user's intent and maintain continuity. Do not treat prior AI statements as verified medical facts.\n"
+              f"Prior conversation context:\n{_history_context(history)}\n\n"
+              f"User instruction: {instruction or 'Explain this healthcare document in plain language.'}")
     document_part = types.Part.from_bytes(data=file_bytes, mime_type=mime_type)
     return _extract_text(client.models.generate_content(model="gemini-2.5-flash", contents=[prompt, document_part]))
 
 
-def analyze_health_image(image_bytes: bytes, mime_type: str, instruction: str, language: str = "en") -> str:
-    return analyze_health_document(image_bytes, mime_type, instruction, language)
+def analyze_health_image(image_bytes: bytes, mime_type: str, instruction: str, language: str = "en", history=None) -> str:
+    return analyze_health_document(image_bytes, mime_type, instruction, language, history)
