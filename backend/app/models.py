@@ -148,9 +148,11 @@ class ClinicalReview(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     patient_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
     doctor_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    record_type = db.Column(db.String(30), nullable=True, index=True)
+    record_id = db.Column(db.Integer, nullable=True, index=True)
     status = db.Column(db.String(30), nullable=False, default="reviewed")
     note = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
 
     def to_dict(self):
-        return {"id": self.id, "patient_id": self.patient_id, "doctor_id": self.doctor_id, "status": self.status, "note": self.note, "created_at": self.created_at.isoformat()}
+        return {"id": self.id, "patient_id": self.patient_id, "doctor_id": self.doctor_id, "record_type": self.record_type or "", "record_id": self.record_id, "status": self.status, "note": self.note, "created_at": self.created_at.isoformat()}
