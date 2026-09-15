@@ -13,6 +13,7 @@ MAX_MESSAGE_LENGTH = 4000
 MAX_INSTRUCTION_LENGTH = 1000
 MAX_DURATION_LENGTH = 200
 MAX_DOCUMENT_SIZE = 10 * 1024 * 1024
+MAX_CHAT_HISTORY = 12
 
 
 def _language():
@@ -38,6 +39,13 @@ def _conversation_id(value):
     if isinstance(value, bool) or not str(value).isdigit() or int(value) <= 0:
         raise ValueError("conversation_id must be a positive integer")
     return int(value)
+
+
+def _chat_history(conversation):
+    return [
+        {"sender": message.sender, "content": message.content}
+        for message in conversation.messages[-MAX_CHAT_HISTORY:]
+    ]
 
 
 @ai_bp.get("/conversations")
@@ -88,7 +96,7 @@ def health_chat():
     if not conversation:
         return jsonify({"message": "conversation not found"}), 404
     try:
-        response = generate_health_chat_response(message, language)
+        response = generate_health_chat_response(message, language, _chat_history(conversation))
         db.session.add(Message(conversation_id=conversation.id, sender="user", content=message, language=language))
         db.session.add(Message(conversation_id=conversation.id, sender="assistant", content=response, language=language))
         db.session.commit()
