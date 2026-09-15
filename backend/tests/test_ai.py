@@ -180,6 +180,74 @@ def test_chat_limits_history_to_recent_messages(client):
     assert calls[-1][-1]["content"] == "response"
 
 
+def test_document_analysis_passes_conversation_history(client):
+    headers = auth_headers(client)
+    calls = []
+
+    def fake_document(file_bytes, mime_type, instruction, language, history):
+        calls.append((file_bytes, mime_type, instruction, language, history))
+        return "Document context response."
+
+    with patch("app.routes.ai.analyze_health_document", side_effect=fake_document), patch(
+        "app.routes.ai.generate_health_chat_response", return_value="Earlier chat response."
+    ):
+        first = client.post(
+            "/api/ai/chat",
+            headers=headers,
+            json={"message": "I am worried about my blood test."},
+        )
+        conversation_id = first.get_json()["conversation"]["id"]
+        response = client.post(
+            "/api/ai/analyze-image",
+            headers=headers,
+            data={
+                "conversation_id": str(conversation_id),
+                "language": "sw",
+                "instruction": "Explain the key findings",
+                "image": (BytesIO(b"fake-document"), "report.png"),
+            },
+            content_type="multipart/form-data",
+        )
+
+    assert response.status_code == 200
+    assert len(calls) == 1
+    assert calls[0][0] == b"fake-document"
+    assert calls[0][1] == "image/png"
+    assert calls[0][2] == "Explain the key findings"
+    assert calls[0][3] == "sw"
+    assert calls[0][4] == [
+        {"sender": "user", "content": "I am worried about my blood test."},
+        {"sender": "assistant", "content": "Earlier chat response."},
+    ]
+
+
+def test_document_analysis_rejects_other_users_conversation(client):
+    first_headers = auth_headers(client)
+    with patch("app.routes.ai.analyze_health_document", return_value="Private result"):
+        created = client.post(
+            "/api/ai/analyze-image",
+            headers=first_headers,
+            data={"image": (BytesIO(b"private"), "report.png")},
+            content_type="multipart/form-data",
+        )
+    conversation_id = created.get_json()["conversation"]["id"]
+
+    second_headers = auth_headers(client, "other-document@example.com")
+    with patch("app.routes.ai.analyze_health_document") as mocked_gemini:
+        response = client.post(
+            "/api/ai/analyze-image",
+            headers=second_headers,
+            data={
+                "conversation_id": str(conversation_id),
+                "image": (BytesIO(b"private"), "report.png"),
+            },
+            content_type="multipart/form-data",
+        )
+
+    assert response.status_code == 404
+    mocked_gemini.assert_not_called()
+
+
 def test_chat_rejects_other_users_conversation(client):
     first_headers = auth_headers(client)
     with patch(
