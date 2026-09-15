@@ -3,7 +3,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy import select
 
 from ..extensions import db
-from ..models import Conversation, HealthTimelineEvent, Message
+from ..models import Conversation, HealthTimelineEvent, MedicalReport, Message, SymptomCheck
 from ..services.gemini_service import GeminiServiceError, analyze_health_document, generate_health_chat_response, generate_symptom_check_response
 
 ai_bp = Blueprint("ai", __name__, url_prefix="/api/ai")
@@ -82,6 +82,26 @@ def health_timeline():
     return jsonify({"timeline": [event.to_dict() for event in events]}), 200
 
 
+@ai_bp.get("/symptom-checks")
+@jwt_required()
+def list_symptom_checks():
+    user_id = int(get_jwt_identity())
+    records = db.session.scalars(
+        select(SymptomCheck).where(SymptomCheck.user_id == user_id).order_by(SymptomCheck.created_at.desc()).limit(MAX_TIMELINE_EVENTS)
+    ).all()
+    return jsonify({"symptom_checks": [record.to_dict() for record in records]}), 200
+
+
+@ai_bp.get("/medical-reports")
+@jwt_required()
+def list_medical_reports():
+    user_id = int(get_jwt_identity())
+    records = db.session.scalars(
+        select(MedicalReport).where(MedicalReport.user_id == user_id).order_by(MedicalReport.created_at.desc()).limit(MAX_TIMELINE_EVENTS)
+    ).all()
+    return jsonify({"medical_reports": [record.to_dict() for record in records]}), 200
+
+
 @ai_bp.get("/conversations/<int:conversation_id>")
 @jwt_required()
 def get_conversation(conversation_id):
@@ -152,16 +172,30 @@ def symptom_check():
         result = generate_symptom_check_response(symptoms, age, duration, language)
         db.session.add(Message(conversation_id=conversation.id, sender="user", content=f"Symptoms: {symptoms}", language=language))
         db.session.add(Message(conversation_id=conversation.id, sender="assistant", content=result["summary"], language=language))
+        record = SymptomCheck(
+            user_id=user_id,
+            conversation_id=conversation.id,
+            symptoms=symptoms,
+            age=int(age) if age else None,
+            duration=duration or None,
+            urgency=result["urgency"],
+            summary=result["summary"],
+            possible_explanations=result.get("possible_explanations", []),
+            next_steps=result.get("next_steps", []),
+            red_flags=result.get("red_flags", []),
+            language=language,
+        )
+        db.session.add(record)
         _timeline_event(
             user_id,
             "symptom_check",
             "Symptom check",
             result["summary"],
             conversation.id,
-            {"urgency": result["urgency"], "symptoms": symptoms, "age": age, "duration": duration, "language": language},
+            {"record_id": record.id, "urgency": result["urgency"], "symptoms": symptoms, "age": age, "duration": duration, "language": language},
         )
         db.session.commit()
-        return jsonify({"result": result, "conversation": conversation.to_dict()}), 200
+        return jsonify({"result": result, "record": record.to_dict(), "conversation": conversation.to_dict()}), 200
     except GeminiServiceError as error:
         db.session.rollback()
         return jsonify({"message": str(error)}), 503
@@ -201,19 +235,30 @@ def analyze_image():
         user_content = f"Document uploaded: {uploaded_file.filename}" + (f"\nInstruction: {instruction}" if instruction else "")
         db.session.add(Message(conversation_id=conversation.id, sender="user", content=user_content, language=language))
         db.session.add(Message(conversation_id=conversation.id, sender="assistant", content=response, language=language))
+        record = MedicalReport(
+            user_id=user_id,
+            conversation_id=conversation.id,
+            filename=uploaded_file.filename[:255],
+            mime_type=mime_type,
+            instruction=instruction or None,
+            summary=response,
+            language=language,
+        )
+        db.session.add(record)
+        db.session.flush()
         _timeline_event(
             user_id,
             "document_analysis",
             f"Document analysis: {uploaded_file.filename}",
             response,
             conversation.id,
-            {"filename": uploaded_file.filename, "mime_type": mime_type, "instruction": instruction, "language": language},
+            {"record_id": record.id, "filename": uploaded_file.filename, "mime_type": mime_type, "instruction": instruction, "language": language},
         )
         db.session.commit()
+        return jsonify({"response": response, "record": record.to_dict(), "conversation": conversation.to_dict()}), 200
     except GeminiServiceError as error:
         db.session.rollback()
         return jsonify({"message": str(error)}), 503
     except Exception:
         db.session.rollback()
         return jsonify({"message": "AI document analysis is temporarily unavailable"}), 502
-    return jsonify({"response": response, "conversation": conversation.to_dict()}), 200
