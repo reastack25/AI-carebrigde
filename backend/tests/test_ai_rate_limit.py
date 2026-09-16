@@ -116,3 +116,12 @@ def test_ai_rate_limit_window_is_configurable(client, monkeypatch):
         blocked = client.post("/api/ai/chat", headers=headers, json={"message": "Second request"})
 
     assert_rate_limit_response(blocked, 120)
+
+
+def test_ai_rate_limit_does_not_apply_to_get_requests(client, monkeypatch):
+    configure_rate_limit(monkeypatch)
+
+    response = client.get("/api/ai/chat")
+
+    assert response.status_code == 405
+    assert response.status_code != 429
