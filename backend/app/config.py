@@ -32,6 +32,8 @@ class Config:
                 raise RuntimeError("GEMINI_API_KEY must be set in production")
             if not cls.CORS_ORIGINS.strip():
                 raise RuntimeError("CORS_ORIGINS must be set in production")
+        if cls.JWT_ACCESS_TOKEN_EXPIRES <= 0:
+            raise RuntimeError("JWT_ACCESS_TOKEN_EXPIRES must be greater than zero")
         if cls.AI_RATE_LIMIT <= 0:
             raise RuntimeError("AI_RATE_LIMIT must be greater than zero")
         if cls.AI_RATE_WINDOW_SECONDS <= 0:
