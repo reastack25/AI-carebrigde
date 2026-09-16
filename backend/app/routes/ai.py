@@ -46,7 +46,14 @@ def _conversation_id(value):
 
 
 def _chat_history(conversation):
-    return [{"sender": message.sender, "content": message.content} for message in conversation.messages[-MAX_CHAT_HISTORY:]]
+    messages = db.session.scalars(
+        select(Message)
+        .where(Message.conversation_id == conversation.id)
+        .order_by(Message.created_at.desc(), Message.id.desc())
+        .limit(MAX_CHAT_HISTORY)
+    ).all()
+    messages.reverse()
+    return [{"sender": message.sender, "content": message.content} for message in messages]
 
 
 def _timeline_event(user_id, event_type, title, summary, conversation_id=None, metadata=None):
