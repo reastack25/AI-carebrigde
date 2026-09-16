@@ -119,6 +119,33 @@ def test_ai_rate_limit_window_is_configurable(client, monkeypatch):
     assert_rate_limit_response(blocked, 120)
 
 
+def test_ai_rate_limit_reports_dynamic_retry_after(client, monkeypatch):
+    configure_rate_limit(monkeypatch, limit=1, window_seconds=60)
+    headers = auth_headers(client, "rate-limit-retry-after@example.com")
+
+    from app.extensions import db
+    from app.models import Message
+
+    with patch("app.routes.ai.generate_health_chat_response", return_value="response"):
+        first = client.post("/api/ai/chat", headers=headers, json={"message": "First request"})
+        assert first.status_code == 200
+
+        user_message = db.session.query(Message).filter_by(sender="user").order_by(Message.id.desc()).first()
+        request_timestamp = datetime.now(timezone.utc) - timedelta(seconds=45)
+        user_message.created_at = request_timestamp
+        db.session.commit()
+
+        checked_at = datetime.now(timezone.utc)
+        blocked = client.post("/api/ai/chat", headers=headers, json={"message": "Second request"})
+
+    assert blocked.status_code == 429
+    retry_after = blocked.get_json()["retry_after_seconds"]
+    expected = (request_timestamp + timedelta(seconds=60) - checked_at).total_seconds()
+    assert retry_after in {int(expected), int(expected) + 1}
+    assert 1 <= retry_after < 60
+    assert blocked.headers["Retry-After"] == str(retry_after)
+
+
 def test_ai_rate_limit_ignores_requests_outside_window(client, monkeypatch):
     configure_rate_limit(monkeypatch, limit=1, window_seconds=60)
     headers = auth_headers(client, "rate-limit-expired@example.com")
