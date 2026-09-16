@@ -10,9 +10,19 @@ from app.config import Config
         ("AI_RATE_LIMIT", -1, "AI_RATE_LIMIT must be greater than zero"),
         ("AI_RATE_WINDOW_SECONDS", 0, "AI_RATE_WINDOW_SECONDS must be greater than zero"),
         ("AI_RATE_WINDOW_SECONDS", -1, "AI_RATE_WINDOW_SECONDS must be greater than zero"),
+        (
+            "JWT_ACCESS_TOKEN_EXPIRES",
+            0,
+            "JWT_ACCESS_TOKEN_EXPIRES must be greater than zero",
+        ),
+        (
+            "JWT_ACCESS_TOKEN_EXPIRES",
+            -1,
+            "JWT_ACCESS_TOKEN_EXPIRES must be greater than zero",
+        ),
     ],
 )
-def test_validate_rejects_non_positive_ai_rate_limit_settings(
+def test_validate_rejects_non_positive_numeric_settings(
     monkeypatch, attribute, value, message
 ):
     monkeypatch.setattr(Config, attribute, value)
@@ -50,6 +60,7 @@ def test_validate_accepts_complete_production_configuration(monkeypatch):
     monkeypatch.setattr(Config, "JWT_SECRET_KEY", "production-jwt-secret")
     monkeypatch.setattr(Config, "GEMINI_API_KEY", "production-gemini-key")
     monkeypatch.setattr(Config, "CORS_ORIGINS", "https://app.example.com")
+    monkeypatch.setattr(Config, "JWT_ACCESS_TOKEN_EXPIRES", 3600)
     monkeypatch.setattr(Config, "AI_RATE_LIMIT", 20)
     monkeypatch.setattr(Config, "AI_RATE_WINDOW_SECONDS", 3600)
 
