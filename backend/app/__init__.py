@@ -16,6 +16,18 @@ def create_app(config_class=Config):
     config_class.validate()
 
     CORS(app, origins=config_class.cors_origins())
+
+    @app.after_request
+    def apply_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault(
+            "Permissions-Policy",
+            "camera=(), microphone=(), geolocation=()",
+        )
+        return response
+
     db.init_app(app)
     jwt.init_app(app)
     migrate.init_app(app, db)
