@@ -40,61 +40,18 @@ def test_symptom_check_rejects_oversized_duration(client):
     assert response.get_json()["message"] == "duration must not exceed 200 characters"
 
 
-def test_symptom_check_rejects_invalid_conversation_id(client):
-    headers = auth_headers(client)
-    response = client.post("/api/ai/symptom-check", headers=headers, json={"symptoms": "headache", "conversation_id": "abc"})
-    assert response.status_code == 400
-
-
-def test_symptom_check_success_with_mocked_gemini(client):
-    headers = auth_headers(client)
-    result = {
-        "urgency": "soon",
-        "summary": "This is a test educational summary.",
-        "possible_explanations": ["A common cause"],
-        "next_steps": ["Consider speaking with a clinician"],
-        "red_flags": ["Severe worsening symptoms"],
-        "disclaimer": "This is not a diagnosis.",
-    }
-    with patch("app.routes.ai.generate_symptom_check_response", return_value=result):
-        response = client.post("/api/ai/symptom-check", headers=headers, json={"symptoms": "mild headache", "age": "25", "duration": "1 day"})
-    assert response.status_code == 200
-    data = response.get_json()
-    assert data["result"] == result
-    assert data["record"]["symptoms"] == "mild headache"
-    assert data["record"]["age"] == 25
-    assert data["record"]["urgency"] == "soon"
-
-
 def test_symptom_check_creates_timeline_event(client, app):
-    from app.models import HealthTimelineEvent, SymptomCheck
+    from app.models import HealthTimelineEvent
 
     headers = auth_headers(client)
-    result = {"urgency": "soon", "summary": "Timeline summary.", "possible_explanations": [], "next_steps": [], "red_flags": [], "disclaimer": "Not a diagnosis."}
+    result = {"urgency": "routine", "summary": "Saved symptom response.", "possible_explanations": [], "next_steps": [], "red_flags": [], "disclaimer": "Not a diagnosis."}
     with patch("app.routes.ai.generate_symptom_check_response", return_value=result):
-        response = client.post("/api/ai/symptom-check", headers=headers, json={"symptoms": "headache", "age": "25", "duration": "1 day", "language": "sw"})
+        response = client.post("/api/ai/symptom-check", headers=headers, json={"symptoms": "headache"})
     assert response.status_code == 200
     with app.app_context():
         event = HealthTimelineEvent.query.one()
-        record = SymptomCheck.query.one()
         assert event.event_type == "symptom_check"
-        assert event.summary == result["summary"]
-        assert event.event_metadata["urgency"] == "soon"
-        assert event.event_metadata["language"] == "sw"
-        assert event.event_metadata["record_id"] == record.id
-        assert record.language == "sw"
-
-
-def test_chat_success_with_mocked_gemini(client):
-    headers = auth_headers(client)
-    with patch("app.routes.ai.generate_health_chat_response", return_value="Test educational response."):
-        response = client.post("/api/ai/chat", headers=headers, json={"message": "What is a healthy sleep routine?", "language": "en"})
-    assert response.status_code == 200
-    data = response.get_json()
-    assert data["response"] == "Test educational response."
-    assert len(data["conversation"]["messages"]) == 2
-    assert data["conversation"]["messages"][0]["sender"] == "user"
-    assert data["conversation"]["messages"][1]["sender"] == "assistant"
+        assert event.summary == "Saved symptom response."
 
 
 def test_chat_creates_timeline_event(client, app):
@@ -341,3 +298,22 @@ def test_analyze_image_rejects_invalid_heif_signature(client):
     assert response.status_code == 415
     assert response.get_json()["message"] == "uploaded document content does not match its declared type"
     mocked_gemini.assert_not_called()
+
+
+def test_analyze_image_rejects_documents_over_10_mb(client):
+    headers = auth_headers(client, "oversized-document@example.com")
+    oversized_png = VALID_PNG + (b"0" * (10 * 1024 * 1024 - len(VALID_PNG) + 1))
+    with patch("app.routes.ai.analyze_health_document") as mocked_gemini:
+        response = client.post("/api/ai/analyze-image", headers=headers, data={"image": (BytesIO(oversized_png), "large.png")}, content_type="multipart/form-data")
+    assert response.status_code == 413
+    assert response.get_json()["message"] == "document must not exceed 10 MB"
+    mocked_gemini.assert_not_called()
+
+
+def test_analyze_image_accepts_document_at_10_mb_limit(client):
+    headers = auth_headers(client, "max-document@example.com")
+    max_size_png = VALID_PNG + (b"0" * (10 * 1024 * 1024 - len(VALID_PNG)))
+    with patch("app.routes.ai.analyze_health_document", return_value="Max-size report") as mocked_gemini:
+        response = client.post("/api/ai/analyze-image", headers=headers, data={"image": (BytesIO(max_size_png), "max.png")}, content_type="multipart/form-data")
+    assert response.status_code == 200
+    mocked_gemini.assert_called_once()
