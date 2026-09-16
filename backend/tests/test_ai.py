@@ -213,7 +213,7 @@ def test_document_analysis_sanitizes_uploaded_filename(client, app):
         response = client.post("/api/ai/analyze-image", headers=headers, data={"image": (BytesIO(b"fake-document"), "../../patient-report final.pdf")}, content_type="multipart/form-data")
     assert response.status_code == 200
     data = response.get_json()
-    assert data["report"]["filename"] == "patient-report_final.pdf"
+    assert data["record"]["filename"] == "patient-report_final.pdf"
     with app.app_context():
         event = HealthTimelineEvent.query.one()
         record = MedicalReport.query.one()
