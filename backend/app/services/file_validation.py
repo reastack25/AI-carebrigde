@@ -5,8 +5,17 @@ FILE_SIGNATURES = {
     "application/pdf": (b"%PDF-",),
 }
 
+HEIF_BRANDS = {b"heic", b"heix", b"hevc", b"hevx", b"mif1", b"msf1"}
+
 
 def has_valid_file_signature(file_bytes, mime_type):
+    if mime_type in {"image/heic", "image/heif"}:
+        return (
+            len(file_bytes) >= 12
+            and file_bytes[4:8] == b"ftyp"
+            and file_bytes[8:12] in HEIF_BRANDS
+        )
+
     signatures = FILE_SIGNATURES.get(mime_type)
     if signatures is None:
         return True
