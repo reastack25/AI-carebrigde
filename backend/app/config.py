@@ -18,6 +18,8 @@ class Config:
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     MAX_CONTENT_LENGTH = 10 * 1024 * 1024
     JWT_ACCESS_TOKEN_EXPIRES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES", "3600"))
+    AI_RATE_LIMIT = int(os.getenv("AI_RATE_LIMIT", "20"))
+    AI_RATE_WINDOW_SECONDS = int(os.getenv("AI_RATE_WINDOW_SECONDS", "3600"))
 
     @classmethod
     def validate(cls):
@@ -30,6 +32,10 @@ class Config:
                 raise RuntimeError("GEMINI_API_KEY must be set in production")
             if not cls.CORS_ORIGINS.strip():
                 raise RuntimeError("CORS_ORIGINS must be set in production")
+        if cls.AI_RATE_LIMIT <= 0:
+            raise RuntimeError("AI_RATE_LIMIT must be greater than zero")
+        if cls.AI_RATE_WINDOW_SECONDS <= 0:
+            raise RuntimeError("AI_RATE_WINDOW_SECONDS must be greater than zero")
 
     @classmethod
     def cors_origins(cls):
