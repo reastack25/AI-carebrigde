@@ -142,6 +142,37 @@ def test_chat_limits_history_to_recent_messages(client):
     assert calls[-1][-1]["content"] == "response"
 
 
+def test_conversation_listing_is_paginated_and_user_isolated(client):
+    from app.models import Conversation
+    headers = auth_headers(client, "conversation-list@example.com")
+    other_headers = auth_headers(client, "conversation-other@example.com")
+    with app_context_for_test(client):
+        pass
+    with patch("app.routes.ai.generate_health_chat_response", return_value="response"):
+        for index in range(3):
+            response = client.post("/api/ai/chat", headers=headers, json={"message": f"conversation {index}"})
+            assert response.status_code == 200
+        response = client.post("/api/ai/chat", headers=other_headers, json={"message": "other conversation"})
+        assert response.status_code == 200
+    listed = client.get("/api/ai/conversations?limit=2&offset=0", headers=headers)
+    assert listed.status_code == 200
+    data = listed.get_json()
+    assert len(data["conversations"]) == 2
+    assert data["pagination"] == {"limit": 2, "offset": 0, "total": 3, "has_more": True}
+    next_page = client.get("/api/ai/conversations?limit=2&offset=2", headers=headers)
+    assert next_page.status_code == 200
+    assert len(next_page.get_json()["conversations"]) == 1
+    assert next_page.get_json()["pagination"]["has_more"] is False
+    assert all(item["title"] != "other conversation" for item in data["conversations"])
+
+
+def test_conversation_listing_rejects_invalid_pagination(client):
+    headers = auth_headers(client, "conversation-pagination@example.com")
+    for query in ("limit=0", "limit=51", "offset=-1", "limit=abc", "offset=abc"):
+        response = client.get(f"/api/ai/conversations?{query}", headers=headers)
+        assert response.status_code == 400
+
+
 def test_document_analysis_passes_conversation_history(client):
     headers = auth_headers(client)
     calls = []
@@ -266,3 +297,7 @@ def test_chat_returns_service_unavailable_when_gemini_fails(client):
         response = client.post("/api/ai/chat", headers=headers, json={"message": "test"})
     assert response.status_code == 502
     assert response.get_json()["message"] == "AI service is temporarily unavailable"
+
+
+def app_context_for_test(client):
+    return client.application.app_context()
