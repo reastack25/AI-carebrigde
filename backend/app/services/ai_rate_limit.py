@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 
 from flask import jsonify, request
@@ -7,6 +8,8 @@ from sqlalchemy import func, select
 from ..config import Config
 from ..extensions import db
 from ..models import Conversation, Message
+
+logger = logging.getLogger(__name__)
 
 AI_RATE_LIMITED_PATHS = {
     "/api/ai/chat",
@@ -36,6 +39,14 @@ def enforce_ai_rate_limit():
     ) or 0
 
     if recent_requests >= Config.AI_RATE_LIMIT:
+        logger.warning(
+            "AI rate limit exceeded: user_id=%s path=%s recent_requests=%s limit=%s window_seconds=%s",
+            user_id,
+            request.path,
+            recent_requests,
+            Config.AI_RATE_LIMIT,
+            window_seconds,
+        )
         response = jsonify(
             {
                 "message": "AI request limit exceeded. Please try again later.",
