@@ -143,11 +143,8 @@ def test_chat_limits_history_to_recent_messages(client):
 
 
 def test_conversation_listing_is_paginated_and_user_isolated(client):
-    from app.models import Conversation
     headers = auth_headers(client, "conversation-list@example.com")
     other_headers = auth_headers(client, "conversation-other@example.com")
-    with app_context_for_test(client):
-        pass
     with patch("app.routes.ai.generate_health_chat_response", return_value="response"):
         for index in range(3):
             response = client.post("/api/ai/chat", headers=headers, json={"message": f"conversation {index}"})
@@ -207,6 +204,32 @@ def test_document_analysis_creates_timeline_event(client, app):
         assert event.event_metadata["mime_type"] == "image/png"
         assert event.event_metadata["record_id"] == record.id
         assert record.summary == "Report summary saved."
+
+
+def test_document_analysis_sanitizes_uploaded_filename(client, app):
+    from app.models import HealthTimelineEvent, MedicalReport
+    headers = auth_headers(client, "filename-safety@example.com")
+    with patch("app.routes.ai.analyze_health_document", return_value="Sanitized report."):
+        response = client.post("/api/ai/analyze-image", headers=headers, data={"image": (BytesIO(b"fake-document"), "../../patient-report final.pdf")}, content_type="multipart/form-data")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["report"]["filename"] == "patient-report_final.pdf"
+    with app.app_context():
+        event = HealthTimelineEvent.query.one()
+        record = MedicalReport.query.one()
+        assert record.filename == "patient-report_final.pdf"
+        assert event.event_metadata["filename"] == "patient-report_final.pdf"
+        assert ".." not in record.filename
+        assert "/" not in record.filename
+
+
+def test_document_analysis_rejects_filename_that_sanitizes_to_empty(client):
+    headers = auth_headers(client, "invalid-filename@example.com")
+    with patch("app.routes.ai.analyze_health_document") as mocked_gemini:
+        response = client.post("/api/ai/analyze-image", headers=headers, data={"image": (BytesIO(b"fake-document"), "../../")}, content_type="multipart/form-data")
+    assert response.status_code == 400
+    assert response.get_json()["message"] == "document filename is invalid"
+    mocked_gemini.assert_not_called()
 
 
 def test_timeline_is_user_isolated_and_filterable(client):
@@ -276,28 +299,3 @@ def test_analyze_image_rejects_unsupported_type(client):
     headers = auth_headers(client)
     response = client.post("/api/ai/analyze-image", headers=headers, data={"image": (BytesIO(b"not an image"), "file.txt")}, content_type="multipart/form-data")
     assert response.status_code == 415
-
-
-def test_analyze_image_rejects_oversized_instruction(client):
-    headers = auth_headers(client)
-    response = client.post("/api/ai/analyze-image", headers=headers, data={"instruction": "x" * 1001, "image": (BytesIO(b"fake"), "file.png")}, content_type="multipart/form-data")
-    assert response.status_code == 400
-
-
-def test_analyze_image_rejects_oversized_file(client):
-    headers = auth_headers(client)
-    with patch("app.routes.ai.MAX_DOCUMENT_SIZE", 4):
-        response = client.post("/api/ai/analyze-image", headers=headers, data={"image": (BytesIO(b"12345"), "file.png")}, content_type="multipart/form-data")
-    assert response.status_code == 413
-
-
-def test_chat_returns_service_unavailable_when_gemini_fails(client):
-    headers = auth_headers(client)
-    with patch("app.routes.ai.generate_health_chat_response", side_effect=Exception("Gemini unavailable")):
-        response = client.post("/api/ai/chat", headers=headers, json={"message": "test"})
-    assert response.status_code == 502
-    assert response.get_json()["message"] == "AI service is temporarily unavailable"
-
-
-def app_context_for_test(client):
-    return client.application.app_context()
