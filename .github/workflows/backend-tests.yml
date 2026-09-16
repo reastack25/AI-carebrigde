@@ -42,5 +42,12 @@ jobs:
           JWT_SECRET_KEY: ci-jwt-secret
         run: flask --app run.py db upgrade
 
+      - name: Verify registered Flask routes
+        env:
+          DATABASE_URL: sqlite:///ci_migration.db
+          SECRET_KEY: ci-secret
+          JWT_SECRET_KEY: ci-jwt-secret
+        run: flask --app run.py routes
+
       - name: Run backend tests
         run: python -m pytest -q
