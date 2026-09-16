@@ -18,6 +18,8 @@ class FakeModels:
 
     def generate_content(self, **kwargs):
         self.last_kwargs = kwargs
+        if isinstance(self.response, Exception):
+            raise self.response
         return self.response
 
 
@@ -41,6 +43,13 @@ def test_health_chat_rejects_oversized_gemini_response():
     client = FakeClient(fake_response("x" * 12001))
     with patch("app.services.gemini_service._client", return_value=client):
         with pytest.raises(GeminiServiceError, match="oversized response"):
+            generate_health_chat_response("What is a healthy sleep routine?")
+
+
+def test_health_chat_normalizes_gemini_request_failure():
+    client = FakeClient(RuntimeError("network timeout"))
+    with patch("app.services.gemini_service._client", return_value=client):
+        with pytest.raises(GeminiServiceError, match="Gemini service request failed"):
             generate_health_chat_response("What is a healthy sleep routine?")
 
 
