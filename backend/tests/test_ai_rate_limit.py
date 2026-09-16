@@ -1,3 +1,4 @@
+from io import BytesIO
 from unittest.mock import patch
 
 from tests.helpers import register_and_login
@@ -8,10 +9,15 @@ def auth_headers(client, email="rate-limit@example.com"):
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_ai_chat_returns_429_after_rate_limit(client, monkeypatch):
-    from app.services import ai_rate_limit
+def configure_rate_limit(monkeypatch, limit=1, window_seconds=3600):
+    from app.config import Config
 
-    monkeypatch.setattr(ai_rate_limit, "AI_RATE_LIMIT", 1)
+    monkeypatch.setattr(Config, "AI_RATE_LIMIT", limit)
+    monkeypatch.setattr(Config, "AI_RATE_WINDOW_SECONDS", window_seconds)
+
+
+def test_ai_chat_returns_429_after_rate_limit(client, monkeypatch):
+    configure_rate_limit(monkeypatch)
     headers = auth_headers(client)
 
     with patch("app.routes.ai.generate_health_chat_response", return_value="response") as mocked_gemini:
@@ -27,9 +33,7 @@ def test_ai_chat_returns_429_after_rate_limit(client, monkeypatch):
 
 
 def test_ai_rate_limit_is_per_user(client, monkeypatch):
-    from app.services import ai_rate_limit
-
-    monkeypatch.setattr(ai_rate_limit, "AI_RATE_LIMIT", 1)
+    configure_rate_limit(monkeypatch)
     first_headers = auth_headers(client, "rate-limit-first@example.com")
     second_headers = auth_headers(client, "rate-limit-second@example.com")
 
@@ -42,10 +46,7 @@ def test_ai_rate_limit_is_per_user(client, monkeypatch):
 
 
 def test_ai_rate_limit_applies_to_symptom_check_and_document_analysis(client, monkeypatch):
-    from io import BytesIO
-    from app.services import ai_rate_limit
-
-    monkeypatch.setattr(ai_rate_limit, "AI_RATE_LIMIT", 1)
+    configure_rate_limit(monkeypatch)
     headers = auth_headers(client, "rate-limit-endpoints@example.com")
 
     symptom_result = {
@@ -80,3 +81,16 @@ def test_ai_rate_limit_applies_to_symptom_check_and_document_analysis(client, mo
 
     assert document.status_code == 200
     assert blocked_document.status_code == 429
+
+
+def test_ai_rate_limit_window_is_configurable(client, monkeypatch):
+    configure_rate_limit(monkeypatch, limit=1, window_seconds=120)
+    headers = auth_headers(client, "rate-limit-window@example.com")
+
+    with patch("app.routes.ai.generate_health_chat_response", return_value="response"):
+        client.post("/api/ai/chat", headers=headers, json={"message": "First request"})
+        blocked = client.post("/api/ai/chat", headers=headers, json={"message": "Second request"})
+
+    assert blocked.status_code == 429
+    assert blocked.get_json()["retry_after_seconds"] == 120
+    assert blocked.headers["Retry-After"] == "120"
