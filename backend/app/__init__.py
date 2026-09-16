@@ -8,6 +8,7 @@ from .routes.auth import auth_bp
 from .routes.clinical import clinical_bp
 from .routes.health import health_bp
 from .routes.medications import medications_bp
+from .services.ai_rate_limit import enforce_ai_rate_limit
 
 
 def create_app(config_class=Config):
@@ -16,6 +17,10 @@ def create_app(config_class=Config):
     config_class.validate()
 
     CORS(app, origins=config_class.cors_origins())
+
+    @app.before_request
+    def enforce_ai_request_limits():
+        return enforce_ai_rate_limit()
 
     @app.after_request
     def apply_security_headers(response):
