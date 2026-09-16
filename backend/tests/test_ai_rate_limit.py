@@ -125,3 +125,12 @@ def test_ai_rate_limit_does_not_apply_to_get_requests(client, monkeypatch):
 
     assert response.status_code == 405
     assert response.status_code != 429
+
+
+def test_ai_rate_limit_does_not_apply_to_unrelated_post_requests(client, monkeypatch):
+    configure_rate_limit(monkeypatch)
+
+    response = client.post("/api/auth/login", json={})
+
+    assert response.status_code == 401
+    assert response.status_code != 429
