@@ -14,6 +14,7 @@ MAX_INSTRUCTION_LENGTH = 1000
 MAX_DURATION_LENGTH = 200
 MAX_DOCUMENT_SIZE = 10 * 1024 * 1024
 MAX_CHAT_HISTORY = 12
+MAX_CONVERSATIONS = 50
 MAX_TIMELINE_EVENTS = 50
 
 
@@ -63,7 +64,12 @@ def _timeline_event(user_id, event_type, title, summary, conversation_id=None, m
 @jwt_required()
 def list_conversations():
     user_id = int(get_jwt_identity())
-    conversations = db.session.scalars(select(Conversation).where(Conversation.user_id == user_id).order_by(Conversation.created_at.desc())).all()
+    conversations = db.session.scalars(
+        select(Conversation)
+        .where(Conversation.user_id == user_id)
+        .order_by(Conversation.created_at.desc())
+        .limit(MAX_CONVERSATIONS)
+    ).all()
     return jsonify({"conversations": [item.to_dict(include_messages=False) for item in conversations]}), 200
 
 
