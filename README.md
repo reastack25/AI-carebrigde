@@ -36,7 +36,37 @@ AI_RATE_LIMIT=20
 AI_RATE_WINDOW_SECONDS=3600
 ```
 
-Both values must be positive integers. The limiter counts persisted user messages, so malformed requests and provider failures are not counted as successful AI requests. Rate-limit violations are logged with the authenticated user ID, endpoint, current count, configured limit, and window duration. For high-concurrency production deployments, a shared counter such as Redis or a dedicated request-event table can provide stronger atomicity and cross-instance coordination.
+Both values must be positive integers. The limiter counts persisted user messages, so malformed requests and provider failures are not counted as successful AI requests. Rate-limit violations are logged with the authenticated user ID, endpoint, current count, and window duration. For high-concurrency production deployments, a shared counter such as Redis or a dedicated request-event table can provide stronger atomicity and cross-instance coordination.
+
+## Local development configuration
+
+The Vite development server commonly runs on port `5173`, but it may select `5174` when `5173` is busy. Configure the backend to allow the actual frontend origin in `backend/.env`:
+
+```dotenv
+CORS_ORIGINS=http://localhost:5173,http://localhost:5174
+```
+
+If the frontend uses `127.0.0.1`, add that origin as well. Restart Flask after changing `.env`; configuration is loaded at application startup. Avoid using `*` for an authenticated application.
+
+## Database migrations
+
+The backend uses Flask-Migrate/Alembic for schema management. Always apply the complete migration chain to the database used by the running backend:
+
+```bash
+cd backend
+source .venv/bin/activate
+flask --app run.py db current
+flask --app run.py db upgrade
+```
+
+After changing SQLAlchemy models:
+
+```bash
+flask --app run.py db migrate -m "describe the schema change"
+flask --app run.py db upgrade
+```
+
+If a development database already contains tables created outside Alembic, inspect the schema and migration state before stamping or upgrading it. Do not recreate an existing database casually, because that can remove users and clinical records.
 
 ## Medication extraction API
 
@@ -74,39 +104,6 @@ CareBridge records structured AI activity separately from raw chat messages. Tim
 
 Raw uploaded document bytes are not stored in the timeline. The current implementation keeps analysis metadata and the generated educational summary; persistent file storage can be added later with explicit retention controls.
 
-## Database migrations
-
-The backend uses Flask-Migrate/Alembic for production schema management. The migration chain is:
-
-```text
-0001_baseline
-    ↓
-0002_structured_medical_records
-    ↓
-0003_medications
-```
-
-From the `backend/` directory:
-
-```bash
-flask --app run.py db upgrade
-```
-
-After changing SQLAlchemy models:
-
-```bash
-flask --app run.py db migrate -m "describe the schema change"
-flask --app run.py db upgrade
-```
-
-If a development database already contains the baseline schema and was created outside Alembic, stamp it instead of recreating the tables:
-
-```bash
-flask --app run.py db stamp 0001_baseline
-```
-
-Never run `db upgrade` against an existing database until you have confirmed whether its schema is already represented by the migration history.
-
 ## Repository structure
 
 ```text
@@ -120,12 +117,7 @@ carebridge-ai/
 │   │   └── routes/
 │   ├── migrations/
 │   │   ├── versions/
-│   │   │   ├── 0001_baseline.py
-│   │   │   ├── 0002_structured_medical_records.py
-│   │   │   └── 0003_medications.py
-│   │   ├── env.py
-│   │   ├── alembic.ini
-│   │   └── script.py.mako
+│   │   └── env.py
 │   ├── tests/
 │   ├── .env.example
 │   ├── requirements.txt
