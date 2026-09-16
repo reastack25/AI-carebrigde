@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { authApi } from "../services/api";
 
 export default function Register() {
+  const location = useLocation();
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: "", email: "", password: "", role: "patient" });
   const [error, setError] = useState("");
@@ -16,7 +17,14 @@ export default function Register() {
       const { data } = await authApi.register(form);
       localStorage.setItem("carebridge_token", data.access_token);
       localStorage.setItem("carebridge_user", JSON.stringify(data.user));
-      navigate("/dashboard", { replace: true });
+
+      const requestedPath = location.state?.from;
+      const destination =
+        typeof requestedPath === "string" && requestedPath.startsWith("/")
+          ? requestedPath
+          : "/dashboard";
+
+      navigate(destination, { replace: true });
     } catch (err) {
       setError(err.response?.data?.message || "Unable to create your account.");
     } finally {
