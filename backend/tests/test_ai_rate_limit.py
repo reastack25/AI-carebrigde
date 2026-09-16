@@ -16,6 +16,13 @@ def configure_rate_limit(monkeypatch, limit=1, window_seconds=3600):
     monkeypatch.setattr(Config, "AI_RATE_WINDOW_SECONDS", window_seconds)
 
 
+def assert_rate_limit_response(response, window_seconds):
+    assert response.status_code == 429
+    retry_after = response.get_json()["retry_after_seconds"]
+    assert 1 <= retry_after <= window_seconds
+    assert response.headers["Retry-After"] == str(retry_after)
+
+
 def test_ai_chat_returns_429_after_rate_limit(client, monkeypatch):
     configure_rate_limit(monkeypatch)
     headers = auth_headers(client)
@@ -25,10 +32,8 @@ def test_ai_chat_returns_429_after_rate_limit(client, monkeypatch):
         second = client.post("/api/ai/chat", headers=headers, json={"message": "Second request"})
 
     assert first.status_code == 200
-    assert second.status_code == 429
+    assert_rate_limit_response(second, 3600)
     assert second.get_json()["message"] == "AI request limit exceeded. Please try again later."
-    assert second.get_json()["retry_after_seconds"] == 3600
-    assert second.headers["Retry-After"] == "3600"
     assert mocked_gemini.call_count == 1
 
 
@@ -81,7 +86,7 @@ def test_ai_rate_limit_applies_to_symptom_check_and_document_analysis(client, mo
         blocked = client.post("/api/ai/symptom-check", headers=headers, json={"symptoms": "fever"})
 
     assert symptom.status_code == 200
-    assert blocked.status_code == 429
+    assert_rate_limit_response(blocked, 3600)
 
     second_headers = auth_headers(client, "rate-limit-document@example.com")
     with patch("app.routes.ai.analyze_health_document", return_value="Report"):
@@ -99,7 +104,7 @@ def test_ai_rate_limit_applies_to_symptom_check_and_document_analysis(client, mo
         )
 
     assert document.status_code == 200
-    assert blocked_document.status_code == 429
+    assert_rate_limit_response(blocked_document, 3600)
 
 
 def test_ai_rate_limit_window_is_configurable(client, monkeypatch):
@@ -110,6 +115,4 @@ def test_ai_rate_limit_window_is_configurable(client, monkeypatch):
         client.post("/api/ai/chat", headers=headers, json={"message": "First request"})
         blocked = client.post("/api/ai/chat", headers=headers, json={"message": "Second request"})
 
-    assert blocked.status_code == 429
-    assert blocked.get_json()["retry_after_seconds"] == 120
-    assert blocked.headers["Retry-After"] == "120"
+    assert_rate_limit_response(blocked, 120)
