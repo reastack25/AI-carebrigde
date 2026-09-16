@@ -3,7 +3,9 @@ from unittest.mock import patch
 
 from tests.helpers import register_and_login
 
-PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"test"
+
+VALID_PNG = b"\x89PNG\r\n\x1a\nvalid-test-png"
+VALID_PDF = b"%PDF-1.7\nvalid-test-pdf"
 
 
 def auth_headers(client, email="patient@example.com"):
@@ -181,10 +183,10 @@ def test_document_analysis_passes_conversation_history(client):
     with patch("app.routes.ai.analyze_health_document", side_effect=fake_document), patch("app.routes.ai.generate_health_chat_response", return_value="Earlier chat response."):
         first = client.post("/api/ai/chat", headers=headers, json={"message": "I am worried about my blood test."})
         conversation_id = first.get_json()["conversation"]["id"]
-        response = client.post("/api/ai/analyze-image", headers=headers, data={"conversation_id": str(conversation_id), "language": "sw", "instruction": "Explain the key findings", "image": (BytesIO(PNG_BYTES), "report.png")}, content_type="multipart/form-data")
+        response = client.post("/api/ai/analyze-image", headers=headers, data={"conversation_id": str(conversation_id), "language": "sw", "instruction": "Explain the key findings", "image": (BytesIO(VALID_PNG), "report.png")}, content_type="multipart/form-data")
     assert response.status_code == 200
     assert len(calls) == 1
-    assert calls[0][0] == PNG_BYTES
+    assert calls[0][0] == VALID_PNG
     assert calls[0][1] == "image/png"
     assert calls[0][2] == "Explain the key findings"
     assert calls[0][3] == "sw"
@@ -195,7 +197,7 @@ def test_document_analysis_creates_timeline_event(client, app):
     from app.models import HealthTimelineEvent, MedicalReport
     headers = auth_headers(client)
     with patch("app.routes.ai.analyze_health_document", return_value="Report summary saved."):
-        response = client.post("/api/ai/analyze-image", headers=headers, data={"language": "en", "instruction": "Summarize", "image": (BytesIO(PNG_BYTES), "report.png")}, content_type="multipart/form-data")
+        response = client.post("/api/ai/analyze-image", headers=headers, data={"language": "en", "instruction": "Summarize", "image": (BytesIO(VALID_PNG), "report.png")}, content_type="multipart/form-data")
     assert response.status_code == 200
     with app.app_context():
         event = HealthTimelineEvent.query.one()
@@ -212,15 +214,15 @@ def test_document_analysis_sanitizes_uploaded_filename(client, app):
     from app.models import HealthTimelineEvent, MedicalReport
     headers = auth_headers(client, "filename-safety@example.com")
     with patch("app.routes.ai.analyze_health_document", return_value="Sanitized report."):
-        response = client.post("/api/ai/analyze-image", headers=headers, data={"image": (BytesIO(PNG_BYTES), "../../patient-report final.png")}, content_type="multipart/form-data")
+        response = client.post("/api/ai/analyze-image", headers=headers, data={"image": (BytesIO(VALID_PDF), "../../patient-report final.pdf")}, content_type="multipart/form-data")
     assert response.status_code == 200
     data = response.get_json()
-    assert data["record"]["filename"] == "patient-report_final.png"
+    assert data["record"]["filename"] == "patient-report_final.pdf"
     with app.app_context():
         event = HealthTimelineEvent.query.one()
         record = MedicalReport.query.one()
-        assert record.filename == "patient-report_final.png"
-        assert event.event_metadata["filename"] == "patient-report_final.png"
+        assert record.filename == "patient-report_final.pdf"
+        assert event.event_metadata["filename"] == "patient-report_final.pdf"
         assert ".." not in record.filename
         assert "/" not in record.filename
 
@@ -228,18 +230,9 @@ def test_document_analysis_sanitizes_uploaded_filename(client, app):
 def test_document_analysis_rejects_filename_that_sanitizes_to_empty(client):
     headers = auth_headers(client, "invalid-filename@example.com")
     with patch("app.routes.ai.analyze_health_document") as mocked_gemini:
-        response = client.post("/api/ai/analyze-image", headers=headers, data={"image": (BytesIO(PNG_BYTES), "../../")}, content_type="multipart/form-data")
+        response = client.post("/api/ai/analyze-image", headers=headers, data={"image": (BytesIO(VALID_PDF), "../../")}, content_type="multipart/form-data")
     assert response.status_code == 400
     assert response.get_json()["message"] == "document filename is invalid"
-    mocked_gemini.assert_not_called()
-
-
-def test_document_analysis_rejects_mismatched_content_type(client):
-    headers = auth_headers(client, "signature-safety@example.com")
-    with patch("app.routes.ai.analyze_health_document") as mocked_gemini:
-        response = client.post("/api/ai/analyze-image", headers=headers, data={"image": (BytesIO(b"not-a-png"), "report.png")}, content_type="multipart/form-data")
-    assert response.status_code == 415
-    assert response.get_json()["message"] == "uploaded document content does not match its declared type"
     mocked_gemini.assert_not_called()
 
 
@@ -291,11 +284,11 @@ def test_chat_rejects_other_users_conversation(client):
 def test_document_analysis_rejects_other_users_conversation(client):
     first_headers = auth_headers(client)
     with patch("app.routes.ai.analyze_health_document", return_value="Private result"):
-        created = client.post("/api/ai/analyze-image", headers=first_headers, data={"image": (BytesIO(PNG_BYTES), "report.png")}, content_type="multipart/form-data")
+        created = client.post("/api/ai/analyze-image", headers=first_headers, data={"image": (BytesIO(VALID_PNG), "report.png")}, content_type="multipart/form-data")
     conversation_id = created.get_json()["conversation"]["id"]
     second_headers = auth_headers(client, "other-document@example.com")
     with patch("app.routes.ai.analyze_health_document") as mocked_gemini:
-        response = client.post("/api/ai/analyze-image", headers=second_headers, data={"conversation_id": str(conversation_id), "image": (BytesIO(PNG_BYTES), "report.png")}, content_type="multipart/form-data")
+        response = client.post("/api/ai/analyze-image", headers=second_headers, data={"conversation_id": str(conversation_id), "image": (BytesIO(VALID_PNG), "report.png")}, content_type="multipart/form-data")
     assert response.status_code == 404
     mocked_gemini.assert_not_called()
 
@@ -310,3 +303,12 @@ def test_analyze_image_rejects_unsupported_type(client):
     headers = auth_headers(client)
     response = client.post("/api/ai/analyze-image", headers=headers, data={"image": (BytesIO(b"not an image"), "file.txt")}, content_type="multipart/form-data")
     assert response.status_code == 415
+
+
+def test_analyze_image_rejects_mismatched_file_signature(client):
+    headers = auth_headers(client, "signature-mismatch@example.com")
+    with patch("app.routes.ai.analyze_health_document") as mocked_gemini:
+        response = client.post("/api/ai/analyze-image", headers=headers, data={"image": (BytesIO(b"not-a-png"), "report.png")}, content_type="multipart/form-data")
+    assert response.status_code == 415
+    assert response.get_json()["message"] == "uploaded document content does not match its declared type"
+    mocked_gemini.assert_not_called()
