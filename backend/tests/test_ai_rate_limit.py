@@ -32,6 +32,25 @@ def test_ai_chat_returns_429_after_rate_limit(client, monkeypatch):
     assert mocked_gemini.call_count == 1
 
 
+def test_ai_rate_limit_logs_violation(client, monkeypatch, caplog):
+    configure_rate_limit(monkeypatch)
+    headers = auth_headers(client, "rate-limit-logging@example.com")
+
+    with patch("app.routes.ai.generate_health_chat_response", return_value="response"):
+        client.post("/api/ai/chat", headers=headers, json={"message": "First request"})
+        with caplog.at_level("WARNING", logger="app.services.ai_rate_limit"):
+            blocked = client.post(
+                "/api/ai/chat",
+                headers=headers,
+                json={"message": "Second request"},
+            )
+
+    assert blocked.status_code == 429
+    assert "AI rate limit exceeded" in caplog.text
+    assert "/api/ai/chat" in caplog.text
+    assert "limit=1" in caplog.text
+
+
 def test_ai_rate_limit_is_per_user(client, monkeypatch):
     configure_rate_limit(monkeypatch)
     first_headers = auth_headers(client, "rate-limit-first@example.com")
