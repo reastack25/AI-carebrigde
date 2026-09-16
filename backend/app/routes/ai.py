@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from ..extensions import db
 from ..models import Conversation, HealthTimelineEvent, MedicalReport, Message, SymptomCheck
@@ -60,17 +60,43 @@ def _timeline_event(user_id, event_type, title, summary, conversation_id=None, m
     )
 
 
+def _conversation_pagination():
+    try:
+        limit = int(request.args.get("limit", MAX_CONVERSATIONS))
+        offset = int(request.args.get("offset", 0))
+    except (TypeError, ValueError):
+        raise ValueError("limit and offset must be integers")
+    if not 1 <= limit <= MAX_CONVERSATIONS:
+        raise ValueError(f"limit must be between 1 and {MAX_CONVERSATIONS}")
+    if offset < 0:
+        raise ValueError("offset must be a non-negative integer")
+    return limit, offset
+
+
 @ai_bp.get("/conversations")
 @jwt_required()
 def list_conversations():
     user_id = int(get_jwt_identity())
+    try:
+        limit, offset = _conversation_pagination()
+    except ValueError as error:
+        return jsonify({"message": str(error)}), 400
+    base_query = select(Conversation).where(Conversation.user_id == user_id)
+    total = db.session.scalar(select(func.count()).select_from(base_query.subquery())) or 0
     conversations = db.session.scalars(
-        select(Conversation)
-        .where(Conversation.user_id == user_id)
-        .order_by(Conversation.created_at.desc())
-        .limit(MAX_CONVERSATIONS)
+        base_query.order_by(Conversation.created_at.desc()).offset(offset).limit(limit)
     ).all()
-    return jsonify({"conversations": [item.to_dict(include_messages=False) for item in conversations]}), 200
+    return jsonify(
+        {
+            "conversations": [item.to_dict(include_messages=False) for item in conversations],
+            "pagination": {
+                "limit": limit,
+                "offset": offset,
+                "total": total,
+                "has_more": offset + len(conversations) < total,
+            },
+        }
+    ), 200
 
 
 @ai_bp.get("/timeline")
