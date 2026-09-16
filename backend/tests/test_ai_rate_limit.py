@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from unittest.mock import patch
 
@@ -116,6 +117,26 @@ def test_ai_rate_limit_window_is_configurable(client, monkeypatch):
         blocked = client.post("/api/ai/chat", headers=headers, json={"message": "Second request"})
 
     assert_rate_limit_response(blocked, 120)
+
+
+def test_ai_rate_limit_ignores_requests_outside_window(client, monkeypatch):
+    configure_rate_limit(monkeypatch, limit=1, window_seconds=60)
+    headers = auth_headers(client, "rate-limit-expired@example.com")
+
+    from app.extensions import db
+    from app.models import Message
+
+    with patch("app.routes.ai.generate_health_chat_response", return_value="response"):
+        first = client.post("/api/ai/chat", headers=headers, json={"message": "First request"})
+        assert first.status_code == 200
+
+        user_message = db.session.query(Message).filter_by(sender="user").order_by(Message.id.desc()).first()
+        user_message.created_at = datetime.now(timezone.utc) - timedelta(seconds=61)
+        db.session.commit()
+
+        second = client.post("/api/ai/chat", headers=headers, json={"message": "Second request"})
+
+    assert second.status_code == 200
 
 
 def test_ai_rate_limit_does_not_apply_to_get_requests(client, monkeypatch):
