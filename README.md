@@ -19,6 +19,25 @@ CareBridge AI is a healthcare information and decision-support application desig
 - Flask + PostgreSQL-ready backend with automated tests
 - Versioned PostgreSQL schema migrations with Flask-Migrate/Alembic
 
+## AI request rate limiting
+
+AI-generating POST endpoints are protected by a database-backed per-user rate limit:
+
+- `POST /api/ai/chat`
+- `POST /api/ai/symptom-check`
+- `POST /api/ai/analyze-image`
+
+The default limit is **20 requests per user per 3,600-second window**. When the limit is exceeded, the API returns HTTP `429`, a `Retry-After` header, and a JSON response containing `retry_after_seconds`.
+
+Configure the limit in `backend/.env`:
+
+```dotenv
+AI_RATE_LIMIT=20
+AI_RATE_WINDOW_SECONDS=3600
+```
+
+Both values must be positive integers. The limiter counts persisted user messages, so malformed requests and provider failures are not counted as successful AI requests. Rate-limit violations are logged with the authenticated user ID, endpoint, current count, configured limit, and window duration. For high-concurrency production deployments, a shared counter such as Redis or a dedicated request-event table can provide stronger atomicity and cross-instance coordination.
+
 ## Medication extraction API
 
 All medication endpoints require a valid JWT bearer token.
