@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy import func, select
+from werkzeug.utils import secure_filename
 
 from ..extensions import db
 from ..models import Conversation, HealthTimelineEvent, MedicalReport, Message, SymptomCheck
@@ -244,6 +245,9 @@ def analyze_image():
         return jsonify({"message": "instruction must not exceed 1000 characters"}), 400
     if not uploaded_file or not uploaded_file.filename:
         return jsonify({"message": "document file is required"}), 400
+    safe_filename = secure_filename(uploaded_file.filename)
+    if not safe_filename:
+        return jsonify({"message": "document filename is invalid"}), 400
     mime_type = uploaded_file.mimetype or ""
     if mime_type not in ALLOWED_DOCUMENT_TYPES:
         return jsonify({"message": "unsupported document type"}), 415
@@ -253,18 +257,18 @@ def analyze_image():
     if len(file_bytes) > MAX_DOCUMENT_SIZE:
         return jsonify({"message": "document must not exceed 10 MB"}), 413
     user_id = int(get_jwt_identity())
-    conversation = _conversation(user_id, conversation_id, f"Document analysis: {uploaded_file.filename}")
+    conversation = _conversation(user_id, conversation_id, f"Document analysis: {safe_filename}")
     if not conversation:
         return jsonify({"message": "conversation not found"}), 404
     try:
         response = analyze_health_document(file_bytes, mime_type, instruction, language, _chat_history(conversation))
-        user_content = f"Document uploaded: {uploaded_file.filename}" + (f"\nInstruction: {instruction}" if instruction else "")
+        user_content = f"Document uploaded: {safe_filename}" + (f"\nInstruction: {instruction}" if instruction else "")
         db.session.add(Message(conversation_id=conversation.id, sender="user", content=user_content, language=language))
         db.session.add(Message(conversation_id=conversation.id, sender="assistant", content=response, language=language))
         record = MedicalReport(
             user_id=user_id,
             conversation_id=conversation.id,
-            filename=uploaded_file.filename[:255],
+            filename=safe_filename[:255],
             mime_type=mime_type,
             instruction=instruction or None,
             summary=response,
@@ -275,10 +279,10 @@ def analyze_image():
         _timeline_event(
             user_id,
             "document_analysis",
-            f"Document analysis: {uploaded_file.filename}",
+            f"Document analysis: {safe_filename}",
             response,
             conversation.id,
-            {"record_id": record.id, "filename": uploaded_file.filename, "mime_type": mime_type, "instruction": instruction, "language": language},
+            {"record_id": record.id, "filename": safe_filename, "mime_type": mime_type, "instruction": instruction, "language": language},
         )
         db.session.commit()
         return jsonify({"response": response, "record": record.to_dict(), "conversation": conversation.to_dict()}), 200
