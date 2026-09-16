@@ -252,7 +252,7 @@ def analyze_image():
     mime_type = uploaded_file.mimetype or ""
     if mime_type not in ALLOWED_DOCUMENT_TYPES:
         return jsonify({"message": "unsupported document type"}), 415
-    file_bytes = uploaded_file.read()
+    file_bytes = uploaded_file.stream.read(MAX_DOCUMENT_SIZE + 1)
     if not file_bytes:
         return jsonify({"message": "uploaded document is empty"}), 400
     if len(file_bytes) > MAX_DOCUMENT_SIZE:
