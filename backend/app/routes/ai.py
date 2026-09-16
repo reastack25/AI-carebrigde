@@ -5,6 +5,7 @@ from werkzeug.utils import secure_filename
 
 from ..extensions import db
 from ..models import Conversation, HealthTimelineEvent, MedicalReport, Message, SymptomCheck
+from ..services.file_validation import has_valid_file_signature
 from ..services.gemini_service import GeminiServiceError, analyze_health_document, generate_health_chat_response, generate_symptom_check_response
 
 ai_bp = Blueprint("ai", __name__, url_prefix="/api/ai")
@@ -256,6 +257,8 @@ def analyze_image():
         return jsonify({"message": "uploaded document is empty"}), 400
     if len(file_bytes) > MAX_DOCUMENT_SIZE:
         return jsonify({"message": "document must not exceed 10 MB"}), 413
+    if not has_valid_file_signature(file_bytes, mime_type):
+        return jsonify({"message": "uploaded document content does not match its declared type"}), 415
     user_id = int(get_jwt_identity())
     conversation = _conversation(user_id, conversation_id, f"Document analysis: {safe_filename}")
     if not conversation:
