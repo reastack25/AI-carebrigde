@@ -95,6 +95,29 @@ def test_doctor_can_add_review_and_patient_can_read_it(client):
     assert len(reviews.get_json()["reviews"]) == 1
 
 
+def test_revoked_consent_blocks_doctor_reviews(client):
+    patient = login(client, "revoked-patient@example.com", "patient")
+    doctor = login(client, "revoked-doctor@example.com", "doctor")
+    patient_id = user_id(client, patient)
+    doctor_id = user_id(client, doctor)
+    assert client.post("/api/clinical/consents", headers=headers(patient), json={"doctor_id": doctor_id}).status_code == 201
+    assert client.delete(f"/api/clinical/consents/{doctor_id}", headers=headers(patient)).status_code == 200
+    response = client.post(f"/api/clinical/patients/{patient_id}/reviews", headers=headers(doctor), json={"note": "Attempt after consent was revoked."})
+    assert response.status_code == 403
+
+
+def test_review_rejects_invalid_status_and_record_id(client):
+    patient = login(client, "validation-patient@example.com", "patient")
+    doctor = login(client, "validation-doctor@example.com", "doctor")
+    patient_id = user_id(client, patient)
+    doctor_id = user_id(client, doctor)
+    assert client.post("/api/clinical/consents", headers=headers(patient), json={"doctor_id": doctor_id}).status_code == 201
+    invalid_status = client.post(f"/api/clinical/patients/{patient_id}/reviews", headers=headers(doctor), json={"note": "Invalid status test.", "status": "approved"})
+    assert invalid_status.status_code == 400
+    invalid_record = client.post(f"/api/clinical/patients/{patient_id}/reviews", headers=headers(doctor), json={"note": "Invalid record id test.", "record_type": "symptom_check", "record_id": 0})
+    assert invalid_record.status_code == 400
+
+
 def test_patient_cannot_access_doctor_patient_endpoints(client):
     patient = login(client, "forbidden-patient@example.com", "patient")
     response = client.get("/api/clinical/patients", headers=headers(patient))
