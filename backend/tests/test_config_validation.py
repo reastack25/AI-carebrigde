@@ -31,9 +31,11 @@ def test_validate_rejects_non_positive_numeric_settings(monkeypatch, attribute, 
         ("GEMINI_API_KEY", None, "GEMINI_API_KEY must be set in production"),
         ("GEMINI_API_KEY", "   ", "GEMINI_API_KEY must be set in production"),
         ("CORS_ORIGINS", "   ", "CORS_ORIGINS must be set in production"),
+        ("CORS_ORIGINS", "*", "CORS_ORIGINS must not contain wildcard origins in production"),
+        ("CORS_ORIGINS", "https://app.example.com, *", "CORS_ORIGINS must not contain wildcard origins in production"),
     ],
 )
-def test_validate_rejects_missing_production_settings(monkeypatch, attribute, value, message):
+def test_validate_rejects_invalid_production_settings(monkeypatch, attribute, value, message):
     monkeypatch.setattr(Config, "APP_ENV", "production")
     monkeypatch.setattr(Config, "SECRET_KEY", "production-secret")
     monkeypatch.setattr(Config, "JWT_SECRET_KEY", "production-jwt-secret")
