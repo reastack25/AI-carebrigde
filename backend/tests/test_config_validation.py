@@ -35,8 +35,11 @@ def test_validate_rejects_non_positive_numeric_settings(
     ("attribute", "value", "message"),
     [
         ("SECRET_KEY", "dev-secret-change-me", "SECRET_KEY must be set in production"),
+        ("SECRET_KEY", "   ", "SECRET_KEY must be set in production"),
         ("JWT_SECRET_KEY", "dev-jwt-secret-change-me", "JWT_SECRET_KEY must be set in production"),
+        ("JWT_SECRET_KEY", "   ", "JWT_SECRET_KEY must be set in production"),
         ("GEMINI_API_KEY", None, "GEMINI_API_KEY must be set in production"),
+        ("GEMINI_API_KEY", "   ", "GEMINI_API_KEY must be set in production"),
         ("CORS_ORIGINS", "   ", "CORS_ORIGINS must be set in production"),
     ],
 )
@@ -48,7 +51,7 @@ def test_validate_rejects_missing_production_settings(
     monkeypatch.setattr(Config, "JWT_SECRET_KEY", "production-jwt-secret")
     monkeypatch.setattr(Config, "GEMINI_API_KEY", "production-gemini-key")
     monkeypatch.setattr(Config, "CORS_ORIGINS", "https://app.example.com")
-    monkeypatch.setattr(Config, attribute, value)
+    monkeypatch.setattr(attribute=attribute, value=value)
 
     with pytest.raises(RuntimeError, match=message):
         Config.validate()
