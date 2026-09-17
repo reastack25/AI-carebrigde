@@ -24,11 +24,11 @@ class Config:
     @classmethod
     def validate(cls):
         if cls.APP_ENV == "production":
-            if cls.SECRET_KEY == "dev-secret-change-me":
+            if not cls.SECRET_KEY or not cls.SECRET_KEY.strip() or cls.SECRET_KEY == "dev-secret-change-me":
                 raise RuntimeError("SECRET_KEY must be set in production")
-            if cls.JWT_SECRET_KEY == "dev-jwt-secret-change-me":
+            if not cls.JWT_SECRET_KEY or not cls.JWT_SECRET_KEY.strip() or cls.JWT_SECRET_KEY == "dev-jwt-secret-change-me":
                 raise RuntimeError("JWT_SECRET_KEY must be set in production")
-            if not cls.GEMINI_API_KEY:
+            if not cls.GEMINI_API_KEY or not cls.GEMINI_API_KEY.strip():
                 raise RuntimeError("GEMINI_API_KEY must be set in production")
             if not cls.CORS_ORIGINS.strip():
                 raise RuntimeError("CORS_ORIGINS must be set in production")
