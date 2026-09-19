@@ -50,6 +50,7 @@ class Config:
                 raise RuntimeError("CORS_ORIGINS must be set in production")
             if "*" in cls.cors_origins():
                 raise RuntimeError("CORS_ORIGINS must not contain wildcard origins in production")
+            cls.validate_cors_origins()
             if cls.SQLALCHEMY_DATABASE_URI == "postgresql+psycopg://postgres:password@localhost:5432/carebridge_db":
                 raise RuntimeError("DATABASE_URL must be set in production")
 
@@ -63,10 +64,6 @@ class Config:
     @classmethod
     def cors_origins(cls):
         return [origin.strip() for origin in cls.CORS_ORIGINS.split(",") if origin.strip()]
-
-    @classmethod
-    def cors_origin_values(cls):
-        return cls.cors_origins()
 
     @classmethod
     def validate_cors_origins(cls):
@@ -87,6 +84,3 @@ class Config:
                 "CORS_ORIGINS must contain valid HTTP(S) origins: "
                 + ", ".join(invalid)
             )
-
-        if cls.APP_ENV == "production":
-            cls.validate_cors_origins()
