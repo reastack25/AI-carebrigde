@@ -1,6 +1,6 @@
 import pytest
 
-from app.config import Config
+from app.config import Config, _read_int_env
 
 
 @pytest.mark.parametrize(
@@ -19,6 +19,21 @@ def test_validate_rejects_non_positive_numeric_settings(monkeypatch, attribute, 
 
     with pytest.raises(RuntimeError, match=message):
         Config.validate()
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("JWT_ACCESS_TOKEN_EXPIRES", "not-an-integer"),
+        ("AI_RATE_LIMIT", "20.requests"),
+        ("AI_RATE_WINDOW_SECONDS", ""),
+    ],
+)
+def test_read_int_env_rejects_malformed_values(monkeypatch, name, value):
+    monkeypatch.setenv(name, value)
+
+    with pytest.raises(RuntimeError, match=f"{name} must be an integer"):
+        _read_int_env(name, 1)
 
 
 @pytest.mark.parametrize(
