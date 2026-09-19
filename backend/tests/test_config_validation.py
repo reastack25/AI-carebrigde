@@ -39,6 +39,8 @@ def test_read_int_env_rejects_malformed_values(monkeypatch, name, value):
 @pytest.mark.parametrize(
     ("attribute", "value", "message"),
     [
+        ("APP_ENV", "staging", "APP_ENV must be one of: development, testing, production"),
+        ("APP_ENV", "", "APP_ENV must be one of: development, testing, production"),
         ("SECRET_KEY", "dev-secret-change-me", "SECRET_KEY must be set in production"),
         ("SECRET_KEY", "   ", "SECRET_KEY must be set in production"),
         ("JWT_SECRET_KEY", "dev-jwt-secret-change-me", "JWT_SECRET_KEY must be set in production"),
@@ -56,6 +58,12 @@ def test_read_int_env_rejects_malformed_values(monkeypatch, name, value):
     ],
 )
 def test_validate_rejects_invalid_production_settings(monkeypatch, attribute, value, message):
+    if attribute == "APP_ENV":
+        monkeypatch.setattr(Config, attribute, value)
+        with pytest.raises(RuntimeError, match=message):
+            Config.validate()
+        return
+
     monkeypatch.setattr(Config, "APP_ENV", "production")
     monkeypatch.setattr(Config, "SECRET_KEY", "production-secret")
     monkeypatch.setattr(Config, "JWT_SECRET_KEY", "production-jwt-secret")
