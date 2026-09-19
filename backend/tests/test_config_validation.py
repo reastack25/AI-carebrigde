@@ -86,6 +86,7 @@ def test_validate_rejects_invalid_production_settings(monkeypatch, attribute, va
         "https://app.example.com/path",
         "https://app.example.com?query=1",
         "https://app.example.com#fragment",
+        "https://user:password@app.example.com",
     ],
 )
 def test_validate_cors_origins_rejects_invalid_origins(monkeypatch, origin):
