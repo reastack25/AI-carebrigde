@@ -78,6 +78,45 @@ def test_validate_rejects_invalid_production_settings(monkeypatch, attribute, va
         Config.validate()
 
 
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "ftp://app.example.com",
+        "https://",
+        "https://app.example.com/path",
+        "https://app.example.com?query=1",
+        "https://app.example.com#fragment",
+    ],
+)
+def test_validate_cors_origins_rejects_invalid_origins(monkeypatch, origin):
+    monkeypatch.setattr(Config, "CORS_ORIGINS", origin)
+
+    with pytest.raises(RuntimeError, match="CORS_ORIGINS must contain valid HTTP"):
+        Config.validate_cors_origins()
+
+
+def test_validate_cors_origins_accepts_http_and_https_origins(monkeypatch):
+    monkeypatch.setattr(
+        Config,
+        "CORS_ORIGINS",
+        "http://localhost:5173, https://app.example.com",
+    )
+
+    Config.validate_cors_origins()
+
+
+def test_validate_rejects_invalid_production_cors_origin(monkeypatch):
+    monkeypatch.setattr(Config, "APP_ENV", "production")
+    monkeypatch.setattr(Config, "SECRET_KEY", "production-secret-key-0123456789")
+    monkeypatch.setattr(Config, "JWT_SECRET_KEY", "production-jwt-secret-0123456789")
+    monkeypatch.setattr(Config, "GEMINI_API_KEY", "production-gemini-key")
+    monkeypatch.setattr(Config, "CORS_ORIGINS", "https://app.example.com/path")
+    monkeypatch.setattr(Config, "SQLALCHEMY_DATABASE_URI", "postgresql+psycopg://prod:secret@db.example.com:5432/carebridge")
+
+    with pytest.raises(RuntimeError, match="CORS_ORIGINS must contain valid HTTP"):
+        Config.validate()
+
+
 def test_validate_accepts_complete_production_configuration(monkeypatch):
     monkeypatch.setattr(Config, "APP_ENV", "production")
     monkeypatch.setattr(Config, "SECRET_KEY", "production-secret-key-0123456789")
