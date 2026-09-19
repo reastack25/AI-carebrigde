@@ -31,6 +31,9 @@ class Config:
 
     @classmethod
     def validate(cls):
+        if cls.APP_ENV not in {"development", "testing", "production"}:
+            raise RuntimeError("APP_ENV must be one of: development, testing, production")
+
         if cls.APP_ENV == "production":
             if not cls.SECRET_KEY or not cls.SECRET_KEY.strip() or cls.SECRET_KEY == "dev-secret-change-me":
                 raise RuntimeError("SECRET_KEY must be set in production")
@@ -44,6 +47,7 @@ class Config:
                 raise RuntimeError("CORS_ORIGINS must not contain wildcard origins in production")
             if cls.SQLALCHEMY_DATABASE_URI == "postgresql+psycopg://postgres:password@localhost:5432/carebridge_db":
                 raise RuntimeError("DATABASE_URL must be set in production")
+
         if cls.JWT_ACCESS_TOKEN_EXPIRES <= 0:
             raise RuntimeError("JWT_ACCESS_TOKEN_EXPIRES must be greater than zero")
         if cls.AI_RATE_LIMIT <= 0:
