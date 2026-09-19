@@ -1,4 +1,5 @@
 import os
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -62,3 +63,30 @@ class Config:
     @classmethod
     def cors_origins(cls):
         return [origin.strip() for origin in cls.CORS_ORIGINS.split(",") if origin.strip()]
+
+    @classmethod
+    def cors_origin_values(cls):
+        return cls.cors_origins()
+
+    @classmethod
+    def validate_cors_origins(cls):
+        invalid = []
+        for origin in cls.cors_origins():
+            parsed = urlparse(origin)
+            if (
+                parsed.scheme not in {"http", "https"}
+                or not parsed.netloc
+                or parsed.path
+                or parsed.params
+                or parsed.query
+                or parsed.fragment
+            ):
+                invalid.append(origin)
+        if invalid:
+            raise RuntimeError(
+                "CORS_ORIGINS must contain valid HTTP(S) origins: "
+                + ", ".join(invalid)
+            )
+
+        if cls.APP_ENV == "production":
+            cls.validate_cors_origins()
