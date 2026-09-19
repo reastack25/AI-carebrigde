@@ -43,8 +43,10 @@ def test_read_int_env_rejects_malformed_values(monkeypatch, name, value):
         ("APP_ENV", "", "APP_ENV must be one of: development, testing, production"),
         ("SECRET_KEY", "dev-secret-change-me", "SECRET_KEY must be set in production"),
         ("SECRET_KEY", "   ", "SECRET_KEY must be set in production"),
+        ("SECRET_KEY", "short-secret", "SECRET_KEY must be at least 32 characters in production"),
         ("JWT_SECRET_KEY", "dev-jwt-secret-change-me", "JWT_SECRET_KEY must be set in production"),
         ("JWT_SECRET_KEY", "   ", "JWT_SECRET_KEY must be set in production"),
+        ("JWT_SECRET_KEY", "short-jwt-secret", "JWT_SECRET_KEY must be at least 32 characters in production"),
         ("GEMINI_API_KEY", None, "GEMINI_API_KEY must be set in production"),
         ("GEMINI_API_KEY", "   ", "GEMINI_API_KEY must be set in production"),
         ("CORS_ORIGINS", "   ", "CORS_ORIGINS must be set in production"),
@@ -65,8 +67,8 @@ def test_validate_rejects_invalid_production_settings(monkeypatch, attribute, va
         return
 
     monkeypatch.setattr(Config, "APP_ENV", "production")
-    monkeypatch.setattr(Config, "SECRET_KEY", "production-secret")
-    monkeypatch.setattr(Config, "JWT_SECRET_KEY", "production-jwt-secret")
+    monkeypatch.setattr(Config, "SECRET_KEY", "production-secret-key-0123456789")
+    monkeypatch.setattr(Config, "JWT_SECRET_KEY", "production-jwt-secret-0123456789")
     monkeypatch.setattr(Config, "GEMINI_API_KEY", "production-gemini-key")
     monkeypatch.setattr(Config, "CORS_ORIGINS", "https://app.example.com")
     monkeypatch.setattr(Config, "SQLALCHEMY_DATABASE_URI", "postgresql+psycopg://prod:secret@db.example.com:5432/carebridge")
@@ -78,8 +80,8 @@ def test_validate_rejects_invalid_production_settings(monkeypatch, attribute, va
 
 def test_validate_accepts_complete_production_configuration(monkeypatch):
     monkeypatch.setattr(Config, "APP_ENV", "production")
-    monkeypatch.setattr(Config, "SECRET_KEY", "production-secret")
-    monkeypatch.setattr(Config, "JWT_SECRET_KEY", "production-jwt-secret")
+    monkeypatch.setattr(Config, "SECRET_KEY", "production-secret-key-0123456789")
+    monkeypatch.setattr(Config, "JWT_SECRET_KEY", "production-jwt-secret-0123456789")
     monkeypatch.setattr(Config, "GEMINI_API_KEY", "production-gemini-key")
     monkeypatch.setattr(Config, "CORS_ORIGINS", "https://app.example.com")
     monkeypatch.setattr(Config, "SQLALCHEMY_DATABASE_URI", "postgresql+psycopg://prod:secret@db.example.com:5432/carebridge")
