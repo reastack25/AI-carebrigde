@@ -5,6 +5,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _read_int_env(name, default):
+    raw_value = os.getenv(name, str(default))
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(f"{name} must be an integer") from exc
+
+
 class Config:
     APP_ENV = os.getenv("APP_ENV", "development").strip().lower()
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me")
@@ -17,9 +25,9 @@ class Config:
     CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173")
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     MAX_CONTENT_LENGTH = 10 * 1024 * 1024
-    JWT_ACCESS_TOKEN_EXPIRES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES", "3600"))
-    AI_RATE_LIMIT = int(os.getenv("AI_RATE_LIMIT", "20"))
-    AI_RATE_WINDOW_SECONDS = int(os.getenv("AI_RATE_WINDOW_SECONDS", "3600"))
+    JWT_ACCESS_TOKEN_EXPIRES = _read_int_env("JWT_ACCESS_TOKEN_EXPIRES", 3600)
+    AI_RATE_LIMIT = _read_int_env("AI_RATE_LIMIT", 20)
+    AI_RATE_WINDOW_SECONDS = _read_int_env("AI_RATE_WINDOW_SECONDS", 3600)
 
     @classmethod
     def validate(cls):
