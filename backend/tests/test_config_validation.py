@@ -48,6 +48,11 @@ def test_read_int_env_rejects_malformed_values(monkeypatch, name, value):
         ("CORS_ORIGINS", "   ", "CORS_ORIGINS must be set in production"),
         ("CORS_ORIGINS", "*", "CORS_ORIGINS must not contain wildcard origins in production"),
         ("CORS_ORIGINS", "https://app.example.com, *", "CORS_ORIGINS must not contain wildcard origins in production"),
+        (
+            "SQLALCHEMY_DATABASE_URI",
+            "postgresql+psycopg://postgres:password@localhost:5432/carebridge_db",
+            "DATABASE_URL must be set in production",
+        ),
     ],
 )
 def test_validate_rejects_invalid_production_settings(monkeypatch, attribute, value, message):
@@ -56,6 +61,7 @@ def test_validate_rejects_invalid_production_settings(monkeypatch, attribute, va
     monkeypatch.setattr(Config, "JWT_SECRET_KEY", "production-jwt-secret")
     monkeypatch.setattr(Config, "GEMINI_API_KEY", "production-gemini-key")
     monkeypatch.setattr(Config, "CORS_ORIGINS", "https://app.example.com")
+    monkeypatch.setattr(Config, "SQLALCHEMY_DATABASE_URI", "postgresql+psycopg://prod:secret@db.example.com:5432/carebridge")
     monkeypatch.setattr(Config, attribute, value)
 
     with pytest.raises(RuntimeError, match=message):
@@ -68,6 +74,7 @@ def test_validate_accepts_complete_production_configuration(monkeypatch):
     monkeypatch.setattr(Config, "JWT_SECRET_KEY", "production-jwt-secret")
     monkeypatch.setattr(Config, "GEMINI_API_KEY", "production-gemini-key")
     monkeypatch.setattr(Config, "CORS_ORIGINS", "https://app.example.com")
+    monkeypatch.setattr(Config, "SQLALCHEMY_DATABASE_URI", "postgresql+psycopg://prod:secret@db.example.com:5432/carebridge")
     monkeypatch.setattr(Config, "JWT_ACCESS_TOKEN_EXPIRES", 3600)
     monkeypatch.setattr(Config, "AI_RATE_LIMIT", 20)
     monkeypatch.setattr(Config, "AI_RATE_WINDOW_SECONDS", 3600)
