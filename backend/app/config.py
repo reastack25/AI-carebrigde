@@ -42,6 +42,8 @@ class Config:
                 raise RuntimeError("CORS_ORIGINS must be set in production")
             if "*" in cls.cors_origins():
                 raise RuntimeError("CORS_ORIGINS must not contain wildcard origins in production")
+            if cls.SQLALCHEMY_DATABASE_URI == "postgresql+psycopg://postgres:password@localhost:5432/carebridge_db":
+                raise RuntimeError("DATABASE_URL must be set in production")
         if cls.JWT_ACCESS_TOKEN_EXPIRES <= 0:
             raise RuntimeError("JWT_ACCESS_TOKEN_EXPIRES must be greater than zero")
         if cls.AI_RATE_LIMIT <= 0:
