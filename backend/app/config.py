@@ -73,6 +73,8 @@ class Config:
             if (
                 parsed.scheme not in {"http", "https"}
                 or not parsed.netloc
+                or parsed.username is not None
+                or parsed.password is not None
                 or parsed.path
                 or parsed.params
                 or parsed.query
