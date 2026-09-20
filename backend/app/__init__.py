@@ -12,9 +12,10 @@ from .services.ai_rate_limit import enforce_ai_rate_limit
 
 
 def create_app(config_class=Config):
+    config_class.validate()
+
     app = Flask(__name__)
     app.config.from_object(config_class)
-    config_class.validate()
 
     CORS(app, origins=config_class.cors_origins())
 
