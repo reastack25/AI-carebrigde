@@ -87,6 +87,8 @@ def test_validate_rejects_invalid_production_settings(monkeypatch, attribute, va
         "https://app.example.com?query=1",
         "https://app.example.com#fragment",
         "https://user:password@app.example.com",
+        "https://app.example.com:0",
+        "https://app.example.com:65536",
     ],
 )
 def test_validate_cors_origins_rejects_invalid_origins(monkeypatch, origin):
@@ -104,6 +106,23 @@ def test_validate_cors_origins_accepts_http_and_https_origins(monkeypatch):
     )
 
     Config.validate_cors_origins()
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://localhost:5173",
+        "https://localhost:8443",
+        "http://127.0.0.1:5173",
+        "http://[::1]:5173",
+    ],
+)
+def test_validate_cors_origins_rejects_local_origins_in_production(monkeypatch, origin):
+    monkeypatch.setattr(Config, "APP_ENV", "production")
+    monkeypatch.setattr(Config, "CORS_ORIGINS", origin)
+
+    with pytest.raises(RuntimeError, match="CORS_ORIGINS must contain valid HTTP"):
+        Config.validate_cors_origins()
 
 
 def test_validate_rejects_invalid_production_cors_origin(monkeypatch):
