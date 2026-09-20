@@ -57,6 +57,11 @@ def test_read_int_env_rejects_malformed_values(monkeypatch, name, value):
             "postgresql+psycopg://postgres:password@localhost:5432/carebridge_db",
             "DATABASE_URL must be set in production",
         ),
+        (
+            "SQLALCHEMY_DATABASE_URI",
+            "sqlite:///carebridge.db",
+            "DATABASE_URL must use PostgreSQL in production",
+        ),
     ],
 )
 def test_validate_rejects_invalid_production_settings(monkeypatch, attribute, value, message):
