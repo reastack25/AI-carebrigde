@@ -70,6 +70,14 @@ class Config:
         invalid = []
         for origin in cls.cors_origins():
             parsed = urlparse(origin)
+            hostname = (parsed.hostname or "").lower()
+            try:
+                parsed_port = parsed.port
+            except ValueError:
+                parsed_port = None
+                invalid.append(origin)
+                continue
+
             if (
                 parsed.scheme not in {"http", "https"}
                 or not parsed.netloc
@@ -79,8 +87,14 @@ class Config:
                 or parsed.params
                 or parsed.query
                 or parsed.fragment
+                or (parsed_port is not None and not 1 <= parsed_port <= 65535)
+                or (
+                    cls.APP_ENV == "production"
+                    and hostname in {"localhost", "127.0.0.1", "::1"}
+                )
             ):
                 invalid.append(origin)
+
         if invalid:
             raise RuntimeError(
                 "CORS_ORIGINS must contain valid HTTP(S) origins: "
