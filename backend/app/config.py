@@ -58,8 +58,11 @@ class Config:
             parsed_database_uri = urlparse(database_uri)
             if parsed_database_uri.scheme not in {"postgresql", "postgresql+psycopg"}:
                 raise RuntimeError("DATABASE_URL must use PostgreSQL in production")
-            if not parsed_database_uri.hostname:
+            database_host = (parsed_database_uri.hostname or "").lower()
+            if not database_host:
                 raise RuntimeError("DATABASE_URL must include a database host in production")
+            if database_host in {"localhost", "127.0.0.1", "::1"}:
+                raise RuntimeError("DATABASE_URL must not use a local database host in production")
 
         if cls.JWT_ACCESS_TOKEN_EXPIRES <= 0:
             raise RuntimeError("JWT_ACCESS_TOKEN_EXPIRES must be greater than zero")
