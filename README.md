@@ -38,6 +38,26 @@ AI_RATE_WINDOW_SECONDS=3600
 
 Both values must be positive integers. The limiter counts persisted user messages, so malformed requests and provider failures are not counted as successful AI requests. Rate-limit violations are logged with the authenticated user ID, endpoint, current count, and window duration. For high-concurrency production deployments, a shared counter such as Redis or a dedicated request-event table can provide stronger atomicity and cross-instance coordination.
 
+## Production configuration
+
+Set `APP_ENV=production` and provide production-only secrets and service endpoints. The backend validates these settings before initializing Flask extensions and refuses unsafe defaults.
+
+Required production settings:
+
+```dotenv
+APP_ENV=production
+SECRET_KEY=<32+ character secret>
+JWT_SECRET_KEY=<32+ character secret>
+DATABASE_URL=postgresql+psycopg://<user>:<password>@<managed-db-host>:5432/<database>
+CORS_ORIGINS=https://your-frontend.example.com
+GEMINI_API_KEY=<production Gemini API key>
+JWT_ACCESS_TOKEN_EXPIRES=3600
+AI_RATE_LIMIT=20
+AI_RATE_WINDOW_SECONDS=3600
+```
+
+Production validation rejects development secrets, wildcard or local CORS origins, SQLite/non-PostgreSQL database URLs, the development database default, and local database hosts. Keep credentials and API keys in the deployment platform's secret manager rather than committing them to Git.
+
 ## Local development configuration
 
 The Vite development server commonly runs on port `5173`, but it may select `5174` when `5173` is busy. Configure the backend to allow the actual frontend origin in `backend/.env`:
