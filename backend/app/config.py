@@ -1,5 +1,5 @@
 import os
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from dotenv import load_dotenv
 
@@ -63,6 +63,9 @@ class Config:
                 raise RuntimeError("DATABASE_URL must include a database host in production")
             if database_host in {"localhost", "127.0.0.1", "::1"}:
                 raise RuntimeError("DATABASE_URL must not use a local database host in production")
+            ssl_mode = parse_qs(parsed_database_uri.query).get("sslmode", [""])[0].lower()
+            if ssl_mode != "require":
+                raise RuntimeError("DATABASE_URL must require sslmode=require in production")
 
         if cls.JWT_ACCESS_TOKEN_EXPIRES <= 0:
             raise RuntimeError("JWT_ACCESS_TOKEN_EXPIRES must be greater than zero")
