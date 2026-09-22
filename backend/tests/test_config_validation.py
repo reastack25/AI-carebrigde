@@ -76,7 +76,7 @@ def test_validate_rejects_invalid_production_settings(monkeypatch, attribute, va
     monkeypatch.setattr(Config, "JWT_SECRET_KEY", "production-jwt-secret-0123456789")
     monkeypatch.setattr(Config, "GEMINI_API_KEY", "production-gemini-key")
     monkeypatch.setattr(Config, "CORS_ORIGINS", "https://app.example.com")
-    monkeypatch.setattr(Config, "SQLALCHEMY_DATABASE_URI", "postgresql+psycopg://prod:secret@db.example.com:5432/carebridge")
+    monkeypatch.setattr(Config, "SQLALCHEMY_DATABASE_URI", "postgresql+psycopg://prod:secret@db.example.com:5432/carebridge?sslmode=require")
     monkeypatch.setattr(Config, attribute, value)
 
     with pytest.raises(RuntimeError, match=message):
