@@ -136,7 +136,7 @@ def test_validate_rejects_invalid_production_cors_origin(monkeypatch):
     monkeypatch.setattr(Config, "JWT_SECRET_KEY", "production-jwt-secret-0123456789")
     monkeypatch.setattr(Config, "GEMINI_API_KEY", "production-gemini-key")
     monkeypatch.setattr(Config, "CORS_ORIGINS", "https://app.example.com/path")
-    monkeypatch.setattr(Config, "SQLALCHEMY_DATABASE_URI", "postgresql+psycopg://prod:secret@db.example.com:5432/carebridge")
+    monkeypatch.setattr(Config, "SQLALCHEMY_DATABASE_URI", "postgresql+psycopg://prod:secret@db.example.com:5432/carebridge?sslmode=require")
 
     with pytest.raises(RuntimeError, match="CORS_ORIGINS must contain valid HTTP"):
         Config.validate()
